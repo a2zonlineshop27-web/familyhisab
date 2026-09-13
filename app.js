@@ -1028,11 +1028,26 @@ function setProfileModal(isOpen) {
 
 async function uploadAvatar(file) {
   if (!currentUser || !file) return null;
-  const extension = file.name.split('.').pop().toLowerCase();
-  const path = `${currentUser.id}/avatar.${extension}`;
-  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+
+  const extension = file.name.split('.').pop().toLowerCase() || 'png';
+  const safeFileName = `${Date.now()}-${file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')}`;
+  const path = `${currentUser.id}/${safeFileName}.${extension}`;
+
+  const { error } = await supabase.storage.from('avatars').upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+    cacheControl: '3600',
+  });
   if (error) throw error;
-  return `${supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
+
+  const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(path);
+  if (publicData?.publicUrl) {
+    return `${publicData.publicUrl}?v=${Date.now()}`;
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage.from('avatars').createSignedUrl(path, 60 * 60 * 24 * 365);
+  if (signedError) throw signedError;
+  return signedData?.signedUrl || null;
 }
 
 function renderExpenses(expenses) {
