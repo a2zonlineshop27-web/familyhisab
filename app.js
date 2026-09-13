@@ -127,6 +127,12 @@ const reportRangeSelect = document.querySelector('#reportRangeSelect');
 const cashInHandTableBody = document.querySelector('#cashInHandTableBody');
 const incomeStatementTableBody = document.querySelector('#incomeStatementTableBody');
 const expenseReportTableBody = document.querySelector('#expenseReportTableBody');
+const expenseReportHeadFilter = document.querySelector('#expenseReportHeadFilter');
+const expenseReportMemberFilter = document.querySelector('#expenseReportMemberFilter');
+const expenseReportStartDate = document.querySelector('#expenseReportStartDate');
+const expenseReportEndDate = document.querySelector('#expenseReportEndDate');
+const expenseReportPdfButton = document.querySelector('#expenseReportPdfButton');
+const expenseReportCsvButton = document.querySelector('#expenseReportCsvButton');
 const statementIncomeTableBody = document.querySelector('#statementIncomeTableBody');
 const statementExpenseTableBody = document.querySelector('#statementExpenseTableBody');
 const statementIncomeSummaryBody = document.querySelector('#statementIncomeSummaryBody');
@@ -438,9 +444,46 @@ function renderReportChildren() {
     entry.count += 1;
     expenseByCategory.set(category, entry);
   });
-  document.querySelector('#expenseReportTotal').textContent = formatTaka(totalExpense);
-  document.querySelector('#expenseReportCount').textContent = String(activeExpenses.length);
-  expenseReportTableBody.innerHTML = [...expenseByCategory.entries()].sort((first, second) => second[1].amount - first[1].amount).map(([category, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${escapeHtml(category)}</td><td class="px-5 py-4 text-right text-sm text-slate-600">${row.count}</td><td class="px-5 py-4 text-right text-sm font-bold text-rose-600">${formatTaka(row.amount)}</td></tr>`).join('');
+  renderExpenseReport();
+}
+
+function getFilteredExpenseReportRows() {
+  const activeExpenses = allExpenses.filter((expense) => !expense.is_deleted);
+  const startDate = expenseReportStartDate.value;
+  const endDate = expenseReportEndDate.value;
+  const selectedHead = expenseReportHeadFilter.value;
+  return activeExpenses.filter((expense) => {
+    const category = expense.expense_type || expense.category || 'Other Expense';
+    return (!startDate || expense.expense_date >= startDate) && (!endDate || expense.expense_date <= endDate) && (selectedHead === 'all' || category === selectedHead);
+  });
+}
+
+function renderExpenseReport() {
+  const activeExpenses = allExpenses.filter((expense) => !expense.is_deleted);
+  const selectedHead = expenseReportHeadFilter.value || 'all';
+  const dates = activeExpenses.map((expense) => expense.expense_date).filter(Boolean).sort();
+  if (!expenseReportStartDate.value) expenseReportStartDate.value = dates[0] || new Date().toISOString().slice(0, 10);
+  if (!expenseReportEndDate.value) expenseReportEndDate.value = dates[dates.length - 1] || new Date().toISOString().slice(0, 10);
+  const heads = [...new Set(activeExpenses.map((expense) => expense.expense_type || expense.category || 'Other Expense'))].sort();
+  expenseReportHeadFilter.innerHTML = `<option value="all">All Expense Head</option>${heads.map((head) => `<option value="${escapeHtml(head)}">${escapeHtml(head)}</option>`).join('')}`;
+  expenseReportHeadFilter.value = heads.includes(selectedHead) ? selectedHead : 'all';
+  const rows = getFilteredExpenseReportRows();
+  const grouped = new Map();
+  rows.forEach((expense) => {
+    const type = expense.item_name || expense.title || 'Expense';
+    const category = expense.expense_type || expense.category || 'Other Expense';
+    const key = `${type}::${category}`;
+    const row = grouped.get(key) || { type, category, count: 0, amount: 0 };
+    row.count += 1;
+    row.amount += getExpenseAmount(expense);
+    grouped.set(key, row);
+  });
+  const total = rows.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
+  const dateLabel = `${expenseReportStartDate.value || 'Start'} to ${expenseReportEndDate.value || 'End'}`;
+  document.querySelector('#expenseReportPeriodLabel').textContent = `${dateLabel} · All members`;
+  document.querySelector('#expenseReportTotal').textContent = formatTaka(total);
+  document.querySelector('#expenseReportFooterTotal').textContent = formatTaka(total);
+  expenseReportTableBody.innerHTML = grouped.size ? [...grouped.values()].sort((first, second) => second.amount - first.amount).map((row) => `<tr class="font-semibold transition hover:bg-slate-50"><td class="px-3 py-3 text-sm text-slate-700">${escapeHtml(row.type)}</td><td class="px-3 py-3 text-sm text-slate-600"><span class="rounded bg-emerald-500 px-2 py-1 text-[10px] font-bold text-white">${escapeHtml(row.category)}</span></td><td class="px-3 py-3 text-right text-sm text-slate-600">${row.count}</td><td class="px-3 py-3 text-right text-sm text-rose-600">${formatTaka(row.amount)}</td></tr>`).join('') : '<tr><td colspan="4" class="px-3 py-10 text-center text-sm text-slate-400">No expenses found for this filter.</td></tr>';
 }
 
 function renderIncomeStatement() {
@@ -1357,6 +1400,20 @@ document.querySelectorAll('.nav-item').forEach((item) => {
 
 if (reportRangeSelect) reportRangeSelect.addEventListener('change', renderReports);
 if (statementApplyButton) statementApplyButton.addEventListener('click', renderIncomeStatement);
+if (expenseReportHeadFilter) expenseReportHeadFilter.addEventListener('change', renderExpenseReport);
+if (expenseReportMemberFilter) expenseReportMemberFilter.addEventListener('change', renderExpenseReport);
+if (expenseReportStartDate) expenseReportStartDate.addEventListener('change', renderExpenseReport);
+if (expenseReportEndDate) expenseReportEndDate.addEventListener('change', renderExpenseReport);
+if (expenseReportPdfButton) expenseReportPdfButton.addEventListener('click', () => window.print());
+if (expenseReportCsvButton) expenseReportCsvButton.addEventListener('click', () => {
+  const rows = getFilteredExpenseReportRows();
+  const csv = [['Expense Type', 'Category', 'Date', 'Amount'], ...rows.map((expense) => [expense.item_name || expense.title || 'Expense', expense.expense_type || expense.category || 'Other Expense', expense.expense_date, getExpenseAmount(expense)])].map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  link.download = 'expense-report.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
 userRoleFilter.addEventListener('change', renderMembers);
 addUserButton.addEventListener('click', () => setAddUserModal(true));
 closeAddUserModal.addEventListener('click', () => setAddUserModal(false));
