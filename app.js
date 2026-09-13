@@ -74,6 +74,8 @@ const expenseTypesView = document.querySelector('#expenseTypesView');
 const expenseTypeModal = document.querySelector('#expenseTypeModal');
 const expenseTypeForm = document.querySelector('#expenseTypeForm');
 const expenseTypeParent = document.querySelector('#expenseTypeParent');
+const expenseTypeParentField = document.querySelector('#expenseTypeParentField');
+const expenseTypeNameLabel = document.querySelector('#expenseTypeNameLabel');
 const expenseTypeName = document.querySelector('#expenseTypeName');
 const expenseTypeDescription = document.querySelector('#expenseTypeDescription');
 const expenseTypeParentRequired = document.querySelector('#expenseTypeParentRequired');
@@ -220,6 +222,8 @@ function openExpenseTypeModal(typeId = null, asExpenseName = false) {
   expenseTypeParent.innerHTML = `<option value="">+ Create as New Main Type</option>${expenseTypes.filter((item) => !item.parent_id && item.id !== typeId).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}`;
   expenseTypeParent.value = type?.parent_id || '';
   expenseTypeParent.required = asExpenseName;
+  expenseTypeParentField.classList.toggle('hidden', !asExpenseName && !type?.parent_id);
+  expenseTypeNameLabel.textContent = asExpenseName || type?.parent_id ? 'Expense Name' : 'Expense Type';
   expenseTypeParentRequired.classList.toggle('hidden', !asExpenseName);
   expenseTypeParentHint.textContent = asExpenseName ? 'Choose the parent type for this expense name.' : 'Leave empty to create a main expense type.';
   expenseTypeName.value = type?.name || '';
@@ -236,6 +240,8 @@ function closeExpenseTypeModal() {
   editingExpenseTypeId = null;
   creatingExpenseName = false;
   expenseTypeParent.required = false;
+  expenseTypeParentField.classList.remove('hidden');
+  expenseTypeNameLabel.textContent = 'Expense Name';
   expenseTypeParentRequired.classList.add('hidden');
   expenseTypeParentHint.textContent = 'Leave empty to create a main expense type.';
   expenseTypeModalTitle.textContent = 'Add Expense Type';
@@ -1364,10 +1370,7 @@ document.querySelector('#expenseTypesBack').addEventListener('click', () => {
 document.querySelector('#addExpenseTypeButton').addEventListener('click', () => openExpenseTypeModal());
 document.querySelector('#addExpenseNameButton').addEventListener('click', () => openExpenseTypeModal(null, true));
 document.querySelector('#closeExpenseTypeModal').addEventListener('click', closeExpenseTypeModal);
-document.querySelector('#resetExpenseType').addEventListener('click', () => {
-  expenseTypeForm.reset();
-  expenseTypeName.focus();
-});
+document.querySelector('#resetExpenseType').addEventListener('click', closeExpenseTypeModal);
 expenseTypeModal.addEventListener('click', (event) => {
   if (event.target === expenseTypeModal) closeExpenseTypeModal();
 });
@@ -1518,12 +1521,12 @@ if (expenseReportCsvButton) expenseReportCsvButton.addEventListener('click', () 
   link.click();
   URL.revokeObjectURL(link.href);
 });
-userRoleFilter.addEventListener('change', renderMembers);
-addUserButton.addEventListener('click', () => setAddUserModal(true));
-closeAddUserModal.addEventListener('click', () => setAddUserModal(false));
-cancelAddUser.addEventListener('click', () => setAddUserModal(false));
-addUserModal.addEventListener('click', (event) => { if (event.target === addUserModal) setAddUserModal(false); });
-addUserForm.addEventListener('submit', addMember);
+if (userRoleFilter) userRoleFilter.addEventListener('change', renderMembers);
+if (addUserButton) addUserButton.addEventListener('click', () => setAddUserModal(true));
+if (closeAddUserModal) closeAddUserModal.addEventListener('click', () => setAddUserModal(false));
+if (cancelAddUser) cancelAddUser.addEventListener('click', () => setAddUserModal(false));
+if (addUserModal) addUserModal.addEventListener('click', (event) => { if (event.target === addUserModal) setAddUserModal(false); });
+if (addUserForm) addUserForm.addEventListener('submit', addMember);
 
 if (window.lucide) lucide.createIcons();
 collapseNavigationMenus();
