@@ -90,6 +90,7 @@ const expenseMemoForm = document.querySelector('#expenseMemoForm');
 const memoRows = document.querySelector('#memoRows');
 const memoTotal = document.querySelector('#memoTotal');
 const incomeView = document.querySelector('#incomeView');
+const allIncomeView = document.querySelector('#allIncomeView');
 const incomeForm = document.querySelector('#incomeForm');
 const incomeMessage = document.querySelector('#incomeMessage');
 const incomeSubmit = document.querySelector('#incomeSubmit');
@@ -103,6 +104,12 @@ const incomeTypeDescription = document.querySelector('#incomeTypeDescription');
 const incomeTypeMessage = document.querySelector('#incomeTypeMessage');
 const incomeTypesTableBody = document.querySelector('#incomeTypesTableBody');
 const incomeTypesEmpty = document.querySelector('#incomeTypesEmpty');
+const allIncomeSearch = document.querySelector('#allIncomeSearch');
+const allIncomeSourceFilter = document.querySelector('#allIncomeSourceFilter');
+const allIncomeStartDate = document.querySelector('#allIncomeStartDate');
+const allIncomeEndDate = document.querySelector('#allIncomeEndDate');
+const allIncomeTableBody = document.querySelector('#allIncomeTableBody');
+const allIncomeEmpty = document.querySelector('#allIncomeEmpty');
 const incomeTypeModal = document.querySelector('#incomeTypeModal');
 const incomeTypeModalContent = document.querySelector('#incomeTypeModalContent');
 const closeIncomeTypeModal = document.querySelector('#closeIncomeTypeModal');
@@ -340,6 +347,27 @@ async function loadIncomes(includeDeleted = false) {
   if (error) { showIncomeMessage(error.message, true); return; }
   incomes = data || [];
   renderIncomes();
+  renderAllIncome();
+}
+
+function renderAllIncome() {
+  if (!allIncomeTableBody) return;
+  const sources = [...new Set(incomes.map((income) => income.source).filter(Boolean))].sort();
+  const selectedSource = allIncomeSourceFilter.value || 'all';
+  allIncomeSourceFilter.innerHTML = `<option value="all">All sources</option>${sources.map((source) => `<option value="${escapeHtml(source)}">${escapeHtml(source)}</option>`).join('')}`;
+  allIncomeSourceFilter.value = sources.includes(selectedSource) ? selectedSource : 'all';
+  const query = allIncomeSearch.value.trim().toLowerCase();
+  const rows = incomes.filter((income) => {
+    const text = `${income.source || ''} ${income.note || ''}`.toLowerCase();
+    return (!query || text.includes(query)) && (allIncomeSourceFilter.value === 'all' || income.source === allIncomeSourceFilter.value) && (!allIncomeStartDate.value || income.income_date >= allIncomeStartDate.value) && (!allIncomeEndDate.value || income.income_date <= allIncomeEndDate.value);
+  });
+  const total = rows.reduce((sum, income) => sum + Number(income.amount || 0), 0);
+  document.querySelector('#allIncomeFilteredTotal').textContent = formatTaka(total);
+  document.querySelector('#allIncomeFilteredCount').textContent = String(rows.length);
+  allIncomeEmpty.classList.toggle('hidden', rows.length > 0);
+  allIncomeTableBody.innerHTML = rows.map((income) => `<tr class="transition hover:bg-emerald-50/40"><td class="px-5 py-4 text-sm font-bold text-slate-800">${escapeHtml(income.source)}</td><td class="px-5 py-4 text-sm text-slate-500">${escapeHtml(income.note || 'No note')}</td><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${income.income_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-emerald-700">${formatTaka(income.amount)}</td><td class="px-5 py-4 text-right"><button type="button" data-all-income-delete="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(income.source)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></td></tr>`).join('');
+  allIncomeTableBody.querySelectorAll('[data-all-income-delete]').forEach((button) => button.addEventListener('click', () => deleteIncome(button.dataset.allIncomeDelete)));
+  if (window.lucide) lucide.createIcons();
 }
 
 async function deleteIncome(incomeId) {
@@ -366,6 +394,7 @@ function setAppView(view) {
   dashboardMain.classList.toggle('hidden', view !== 'dashboard');
   incomeTypesView.classList.toggle('hidden', view !== 'income-types');
   incomeView.classList.toggle('hidden', view !== 'income' && view !== 'deleted-income');
+  allIncomeView.classList.toggle('hidden', view !== 'income-all');
   expenseMemoView.classList.toggle('hidden', view !== 'memo');
   allExpensesView.classList.toggle('hidden', view !== 'all' && view !== 'deleted');
   expenseTypesView.classList.toggle('hidden', view !== 'types');
@@ -380,7 +409,7 @@ function setAppView(view) {
   }
   if (view === 'types') loadExpenseTypes();
   if (view === 'income-types' || view === 'income') loadIncomeTypes();
-  if (view === 'income' || view === 'deleted-income') loadIncomes(view === 'deleted-income');
+  if (view === 'income' || view === 'income-all' || view === 'deleted-income') loadIncomes(view === 'deleted-income');
   if (view === 'all' || view === 'deleted') loadAllExpenses(view === 'deleted');
   if (view === 'members') loadMembers();
   if (view === 'reports' || view === 'cash-in-hand' || view === 'income-statement' || view === 'expense-report') loadReportsData();
@@ -1058,7 +1087,7 @@ async function showDashboard(isVisible, user = currentUser, forceDashboard = fal
     subscribeToExpenses();
     if (forceDashboard) window.location.hash = '#dashboard';
     const route = window.location.hash;
-    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#reports/cash-in-hand' ? 'cash-in-hand' : route === '#reports/income-statement' ? 'income-statement' : route === '#reports/expense' ? 'expense-report' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
+    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/all' ? 'income-all' : route === '#income/add' || route === '#income' ? 'income' : route === '#reports/cash-in-hand' ? 'cash-in-hand' : route === '#reports/income-statement' ? 'income-statement' : route === '#reports/expense' ? 'expense-report' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
     if (!route || route === '#dashboard') collapseNavigationMenus();
   } else {
     unsubscribeFromExpenses();
@@ -1396,7 +1425,7 @@ incomeLinks.forEach((link) => {
   link.addEventListener('click', () => {
     setActiveIncomeLink(link);
     setIncomeExpanded(true);
-    const view = link.dataset.incomeLink === 'types' ? 'income-types' : link.dataset.incomeLink === 'deleted' ? 'deleted-income' : 'income';
+    const view = link.dataset.incomeLink === 'types' ? 'income-types' : link.dataset.incomeLink === 'deleted' ? 'deleted-income' : link.dataset.incomeLink === 'all' ? 'income-all' : 'income';
     window.location.hash = link.getAttribute('href');
     setAppView(view);
     setSidebar(false);
@@ -1550,6 +1579,10 @@ document.querySelectorAll('.nav-item').forEach((item) => {
 
 if (reportRangeSelect) reportRangeSelect.addEventListener('change', renderReports);
 if (statementApplyButton) statementApplyButton.addEventListener('click', renderIncomeStatement);
+if (allIncomeSearch) allIncomeSearch.addEventListener('input', renderAllIncome);
+if (allIncomeSourceFilter) allIncomeSourceFilter.addEventListener('change', renderAllIncome);
+if (allIncomeStartDate) allIncomeStartDate.addEventListener('change', renderAllIncome);
+if (allIncomeEndDate) allIncomeEndDate.addEventListener('change', renderAllIncome);
 if (expenseReportHeadFilter) expenseReportHeadFilter.addEventListener('change', renderExpenseReport);
 if (expenseReportMemberFilter) expenseReportMemberFilter.addEventListener('change', renderExpenseReport);
 if (expenseReportStartDate) expenseReportStartDate.addEventListener('change', renderExpenseReport);
