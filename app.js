@@ -127,6 +127,14 @@ const reportRangeSelect = document.querySelector('#reportRangeSelect');
 const cashInHandTableBody = document.querySelector('#cashInHandTableBody');
 const incomeStatementTableBody = document.querySelector('#incomeStatementTableBody');
 const expenseReportTableBody = document.querySelector('#expenseReportTableBody');
+const statementIncomeTableBody = document.querySelector('#statementIncomeTableBody');
+const statementExpenseTableBody = document.querySelector('#statementExpenseTableBody');
+const statementIncomeSummaryBody = document.querySelector('#statementIncomeSummaryBody');
+const statementExpenseSummaryBody = document.querySelector('#statementExpenseSummaryBody');
+const statementStartDate = document.querySelector('#statementStartDate');
+const statementEndDate = document.querySelector('#statementEndDate');
+const statementOpeningBalance = document.querySelector('#statementOpeningBalance');
+const statementApplyButton = document.querySelector('#statementApplyButton');
 const userRoleFilter = document.querySelector('#userRoleFilter');
 const addUserButton = document.querySelector('#addUserButton');
 const addUserModal = document.querySelector('#addUserModal');
@@ -420,19 +428,7 @@ function renderReportChildren() {
     return `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${formatReportMonth(row.key)}</td><td class="px-5 py-4 text-right text-sm font-bold text-emerald-600">${formatTaka(row.income)}</td><td class="px-5 py-4 text-right text-sm font-bold text-rose-600">${formatTaka(row.expense)}</td><td class="px-5 py-4 text-right text-sm font-bold text-slate-900">${formatTaka(closingCash)}</td></tr>`;
   }).join('');
 
-  const incomeByMonth = new Map();
-  activeIncomes.forEach((income) => {
-    const date = new Date(`${income.income_date}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return;
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const entry = incomeByMonth.get(key) || { amount: 0, count: 0 };
-    entry.amount += Number(income.amount || 0);
-    entry.count += 1;
-    incomeByMonth.set(key, entry);
-  });
-  document.querySelector('#incomeStatementTotal').textContent = formatTaka(totalIncome);
-  document.querySelector('#incomeStatementCount').textContent = String(activeIncomes.length);
-  incomeStatementTableBody.innerHTML = [...incomeByMonth.entries()].sort((first, second) => first[0].localeCompare(second[0])).reverse().map(([key, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${formatReportMonth(key)}</td><td class="px-5 py-4 text-right text-sm font-bold text-emerald-600">${formatTaka(row.amount)}</td><td class="px-5 py-4 text-right text-sm text-slate-600">${row.count}</td></tr>`).join('');
+  renderIncomeStatement();
 
   const expenseByCategory = new Map();
   activeExpenses.forEach((expense) => {
@@ -447,11 +443,64 @@ function renderReportChildren() {
   expenseReportTableBody.innerHTML = [...expenseByCategory.entries()].sort((first, second) => second[1].amount - first[1].amount).map(([category, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${escapeHtml(category)}</td><td class="px-5 py-4 text-right text-sm text-slate-600">${row.count}</td><td class="px-5 py-4 text-right text-sm font-bold text-rose-600">${formatTaka(row.amount)}</td></tr>`).join('');
 }
 
+function renderIncomeStatement() {
+  const activeIncomes = incomes.filter((income) => !income.is_deleted);
+  const activeExpenses = allExpenses.filter((expense) => !expense.is_deleted);
+  const dates = [...activeIncomes.map((income) => income.income_date), ...activeExpenses.map((expense) => expense.expense_date)].filter(Boolean).sort();
+  if (!statementStartDate.value) statementStartDate.value = dates[0] || new Date().toISOString().slice(0, 10);
+  if (!statementEndDate.value) statementEndDate.value = dates[dates.length - 1] || new Date().toISOString().slice(0, 10);
+  const startDate = statementStartDate.value;
+  const endDate = statementEndDate.value;
+  const inPeriod = (date) => date && date >= startDate && date <= endDate;
+  const periodIncomes = activeIncomes.filter((income) => inPeriod(income.income_date));
+  const periodExpenses = activeExpenses.filter((expense) => inPeriod(expense.expense_date));
+  const incomeGroups = new Map();
+  periodIncomes.forEach((income) => {
+    const key = income.source || 'Other Income';
+    const row = incomeGroups.get(key) || { amount: 0, count: 0 };
+    row.amount += Number(income.amount || 0);
+    row.count += 1;
+    incomeGroups.set(key, row);
+  });
+  const expenseGroups = new Map();
+  periodExpenses.forEach((expense) => {
+    const key = expense.expense_type || expense.category || 'Other Expense';
+    const row = expenseGroups.get(key) || { amount: 0, count: 0, ids: [] };
+    row.amount += getExpenseAmount(expense);
+    row.count += 1;
+    row.ids.push(expense.id);
+    expenseGroups.set(key, row);
+  });
+  const periodIncomeTotal = periodIncomes.reduce((sum, income) => sum + Number(income.amount || 0), 0);
+  const periodExpenseTotal = periodExpenses.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
+  const openingBalance = Number(statementOpeningBalance.value || 0);
+  const closingBalance = openingBalance + periodIncomeTotal - periodExpenseTotal;
+  const periodLabel = `${startDate || 'Start'} to ${endDate || 'End'}`;
+
+  document.querySelector('#statementPeriodLabel').textContent = periodLabel;
+  document.querySelector('#statementHeaderBalance').textContent = formatTaka(closingBalance);
+  document.querySelector('#statementTotalIncome').textContent = formatTaka(periodIncomeTotal);
+  document.querySelector('#statementTotalExpense').textContent = formatTaka(periodExpenseTotal);
+  document.querySelector('#statementSummaryIncome').textContent = formatTaka(periodIncomeTotal);
+  document.querySelector('#statementSummaryExpense').textContent = formatTaka(periodExpenseTotal);
+  document.querySelector('#statementClosingBalance').textContent = formatTaka(closingBalance);
+
+  statementIncomeTableBody.innerHTML = `<tr class="bg-slate-50"><td colspan="2" class="px-3 py-2 text-right font-bold text-rose-600">OPENING BALANCE</td><td class="px-3 py-2 text-right text-base font-bold text-sky-600">${formatTaka(openingBalance)}</td></tr>${[...incomeGroups.entries()].map(([source, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-3 py-2.5 font-semibold text-slate-700">${escapeHtml(source)}</td><td class="px-3 py-2.5 text-slate-500">${row.count}</td><td class="px-3 py-2.5 text-right font-semibold text-slate-700">${formatTaka(row.amount)}</td></tr>`).join('')}`;
+  statementExpenseTableBody.innerHTML = periodExpenses.length ? [...expenseGroups.entries()].map(([category, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-3 py-2.5 font-semibold text-slate-700">${escapeHtml(category)}</td><td class="px-3 py-2.5"><span class="rounded bg-emerald-500 px-2 py-1 text-[10px] font-bold text-white">${escapeHtml(category)}</span></td><td class="px-3 py-2.5 text-slate-500">${row.count}</td><td class="px-3 py-2.5 text-right font-semibold text-slate-700">${formatTaka(row.amount)}</td><td class="px-3 py-2.5 text-center"><button type="button" data-statement-expense-view="${escapeHtml(row.ids[0])}" class="rounded border border-sky-300 p-1 text-sky-600 transition hover:bg-sky-50" aria-label="View ${escapeHtml(category)}"><i data-lucide="eye" class="h-3.5 w-3.5"></i></button></td></tr>`).join('') : '<tr><td colspan="5" class="px-3 py-8 text-center text-slate-400">No expenses in this period.</td></tr>';
+  statementIncomeSummaryBody.innerHTML = `<tr><td class="border-b border-slate-200 px-3 py-2.5 text-right font-semibold text-slate-600">OPENING BALANCE</td><td class="border-b border-slate-200 px-3 py-2.5 text-right text-sky-600">${formatTaka(openingBalance)}</td></tr>${[...incomeGroups.entries()].map(([source, row]) => `<tr><td class="border-b border-slate-200 px-3 py-2.5 text-right text-slate-500">${escapeHtml(source)}</td><td class="border-b border-slate-200 px-3 py-2.5 text-right">${formatTaka(row.amount)}</td></tr>`).join('')}`;
+  statementExpenseSummaryBody.innerHTML = [...expenseGroups.entries()].map(([category, row]) => `<tr><td class="border-b border-slate-200 px-3 py-2.5 text-right text-slate-500">${escapeHtml(category)}</td><td class="border-b border-slate-200 px-3 py-2.5 text-right">${formatTaka(row.amount)}</td></tr>`).join('');
+  statementExpenseTableBody.querySelectorAll('[data-statement-expense-view]').forEach((button) => button.addEventListener('click', () => {
+    const expense = periodExpenses.find((item) => item.id === button.dataset.statementExpenseView);
+    if (expense) showToast(`${expense.item_name || expense.title || 'Expense'}: ${formatTaka(getExpenseAmount(expense))}`);
+  }));
+  if (window.lucide) lucide.createIcons();
+}
+
 async function loadReportsData() {
   if (!currentUser) return;
   const [incomeResult, expenseResult] = await Promise.all([
     supabase.from('incomes').select('id, source, amount, income_date, note, is_deleted').eq('user_id', currentUser.id).order('income_date', { ascending: true }),
-    supabase.from('expenses').select('id, item_name, title, expense_date, total_amount, amount, is_deleted').eq('user_id', currentUser.id).order('expense_date', { ascending: true }),
+    supabase.from('expenses').select('id, item_name, title, expense_type, category, expense_date, total_amount, amount, is_deleted').eq('user_id', currentUser.id).order('expense_date', { ascending: true }),
   ]);
 
   if (incomeResult.error) {
@@ -1307,6 +1356,7 @@ document.querySelectorAll('.nav-item').forEach((item) => {
 });
 
 if (reportRangeSelect) reportRangeSelect.addEventListener('change', renderReports);
+if (statementApplyButton) statementApplyButton.addEventListener('click', renderIncomeStatement);
 userRoleFilter.addEventListener('change', renderMembers);
 addUserButton.addEventListener('click', () => setAddUserModal(true));
 closeAddUserModal.addEventListener('click', () => setAddUserModal(false));
