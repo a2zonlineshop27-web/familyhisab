@@ -596,14 +596,20 @@ function renderMemoTotal() {
 
 function getExpenseTypeOptions(selectedValue = '') {
   const parents = expenseTypes.filter((type) => !type.parent_id);
-  const orderedTypes = parents.flatMap((parent) => [parent, ...expenseTypes.filter((type) => type.parent_id === parent.id)]);
-  return `<option value="">Choose an expense type</option>${orderedTypes.map((type) => `<option value="${escapeHtml(type.name)}" ${type.name === selectedValue ? 'selected' : ''}>${type.parent_id ? `↳ ${escapeHtml(type.name)}` : escapeHtml(type.name)}</option>`).join('')}`;
+  return `<option value="">Choose an expense type</option>${parents.map((type) => `<option value="${escapeHtml(type.id)}" ${type.id === selectedValue || type.name === selectedValue ? 'selected' : ''}>${escapeHtml(type.name)}</option>`).join('')}`;
+}
+
+function getExpenseNameOptions(parentId = '', selectedValue = '') {
+  const names = expenseTypes.filter((type) => type.parent_id === parentId);
+  return `<option value="">${parentId ? 'Choose an expense name' : 'Select expense type first'}</option>${names.map((type) => `<option value="${escapeHtml(type.name)}" ${type.name === selectedValue ? 'selected' : ''}>${escapeHtml(type.name)}</option>`).join('')}`;
 }
 
 function refreshMemoExpenseTypeOptions() {
   memoRows.querySelectorAll('[data-field="expense-type"]').forEach((select) => {
     const selectedValue = select.value;
     select.innerHTML = getExpenseTypeOptions(selectedValue);
+    const nameSelect = select.closest('[data-memo-row]').querySelector('[data-field="name"]');
+    nameSelect.innerHTML = getExpenseNameOptions(select.value, nameSelect.value);
   });
 }
 
@@ -612,8 +618,12 @@ function addMemoRow(values = {}) {
   const row = document.createElement('div');
   row.dataset.memoRow = String(memoRowId);
   row.className = 'grid gap-3 px-5 py-5 sm:grid-cols-[2fr_1.3fr_0.8fr_0.7fr_1fr_auto] sm:items-end';
-  row.innerHTML = `<div><label class="mb-2 block text-xs font-semibold text-slate-600">Item name</label><input data-field="name" required value="${escapeHtml(values.name || '')}" placeholder="Rui Fish" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Expense type <span class="text-rose-600">*</span></label><select data-field="expense-type" required class="h-10 w-full rounded-lg border border-slate-300 px-2 text-sm">${getExpenseTypeOptions(values.expenseType || '')}</select></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit</label><input data-field="unit" required value="${escapeHtml(values.unit || 'pcs')}" placeholder="kg" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Quantity</label><input data-field="quantity" required min="0.001" step="0.001" type="number" value="${values.quantity || 1}" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit price</label><input data-field="unit-price" required min="0.01" step="0.01" type="number" value="${values.unitPrice || ''}" placeholder="0.00" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><button type="button" data-remove-memo-row class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove item"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
-  row.querySelectorAll('input').forEach((input) => input.addEventListener('input', renderMemoTotal));
+  const selectedParent = expenseTypes.find((type) => !type.parent_id && (type.id === values.expenseType || type.name === values.expenseType)) || (() => { const child = expenseTypes.find((type) => type.parent_id && type.name === values.expenseType); return expenseTypes.find((type) => type.id === child?.parent_id); })();
+  row.innerHTML = `<div><label class="mb-2 block text-xs font-semibold text-slate-600">Expense name <span class="text-rose-600">*</span></label><select data-field="name" required class="h-10 w-full rounded-lg border border-slate-300 px-2 text-sm">${getExpenseNameOptions(selectedParent?.id || '', values.name || '')}</select></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Expense type <span class="text-rose-600">*</span></label><select data-field="expense-type" required class="h-10 w-full rounded-lg border border-slate-300 px-2 text-sm">${getExpenseTypeOptions(selectedParent?.id || values.expenseType || '')}</select></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit <span class="text-rose-600">*</span></label><select data-field="unit" required class="h-10 w-full rounded-lg border border-slate-300 px-2 text-sm"><option value="">Choose unit</option>${['kg', 'pcs', 'gm'].map((unit) => `<option value="${unit}" ${unit === (values.unit || 'pcs') ? 'selected' : ''}>${unit}</option>`).join('')}</select></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Quantity</label><input data-field="quantity" required min="0.001" step="0.001" type="number" value="${values.quantity || 1}" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit price</label><input data-field="unit-price" required min="0.01" step="0.01" type="number" value="${values.unitPrice || ''}" placeholder="0.00" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><button type="button" data-remove-memo-row class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove item"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
+  const typeSelect = row.querySelector('[data-field="expense-type"]');
+  const nameSelect = row.querySelector('[data-field="name"]');
+  typeSelect.addEventListener('change', () => { nameSelect.innerHTML = getExpenseNameOptions(typeSelect.value); renderMemoTotal(); });
+  row.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', renderMemoTotal));
   row.querySelector('[data-remove-memo-row]').addEventListener('click', () => { if (memoRows.children.length > 1) row.remove(); renderMemoTotal(); });
   memoRows.appendChild(row);
   if (window.lucide) lucide.createIcons();
@@ -1447,6 +1457,10 @@ expenseMemoForm.addEventListener('submit', async (event) => {
   if (!currentUser) return showToast('Please sign in before saving an invoice.', true);
   const rows = [...memoRows.querySelectorAll('[data-memo-row]')].map((row) => ({ item_name: row.querySelector('[data-field="name"]').value.trim(), expense_type: row.querySelector('[data-field="expense-type"]').value.trim(), unit: row.querySelector('[data-field="unit"]').value.trim(), quantity: Number(row.querySelector('[data-field="quantity"]').value), unit_price: Number(row.querySelector('[data-field="unit-price"]').value) }));
   if (rows.some((row) => !row.item_name || !row.expense_type || !row.unit || !Number.isFinite(row.quantity) || row.quantity <= 0 || !Number.isFinite(row.unit_price) || row.unit_price <= 0)) return showToast('Please complete every item with a valid name, quantity, unit, and price.', true);
+  rows.forEach((row) => {
+    const type = expenseTypes.find((item) => item.id === row.expense_type);
+    row.expense_type = type?.name || row.expense_type;
+  });
   const saveButton = document.querySelector('#saveInvoiceButton');
   saveButton.disabled = true;
   const { error } = editingExpenseId
