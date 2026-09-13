@@ -341,11 +341,12 @@ function renderIncomes() {
   document.querySelector('#incomeCountLabel').textContent = `${incomes.length} ${incomes.length === 1 ? 'entry' : 'entries'}`;
   incomeEmpty.classList.toggle('hidden', incomes.length > 0);
   const incomeAction = showingDeletedIncomes
-    ? (income) => `<button type="button" data-restore-income="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore ${escapeHtml(income.source)}"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
+    ? (income) => `<div class="inline-flex items-center gap-1"><button type="button" data-restore-income="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore ${escapeHtml(income.source)}"><i data-lucide="undo-2" class="h-4 w-4"></i></button><button type="button" data-permanent-delete-income="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Permanently delete ${escapeHtml(income.source)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div>`
     : (income) => `<button type="button" data-delete-income="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(income.source)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
   incomeTableBody.innerHTML = incomes.map((income) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(income.source)}</p>${income.note ? `<p class="text-xs font-normal text-slate-500">${escapeHtml(income.note)}</p>` : ''}</div></td><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${income.income_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-emerald-700">${formatTaka(income.amount)}</td><td class="px-5 py-4 text-right">${incomeAction(income)}</td></tr>`).join('');
   incomeTableBody.querySelectorAll('[data-delete-income]').forEach((button) => button.addEventListener('click', () => deleteIncome(button.dataset.deleteIncome)));
   incomeTableBody.querySelectorAll('[data-restore-income]').forEach((button) => button.addEventListener('click', () => restoreIncome(button.dataset.restoreIncome)));
+  incomeTableBody.querySelectorAll('[data-permanent-delete-income]').forEach((button) => button.addEventListener('click', () => permanentlyDeleteIncome(button.dataset.permanentDeleteIncome)));
   if (window.lucide) lucide.createIcons();
   renderDashboardChart();
 }
@@ -407,6 +408,17 @@ async function restoreIncome(incomeId) {
   const { error } = await supabase.from('incomes').update({ is_deleted: false }).eq('id', incomeId).eq('user_id', currentUser.id);
   if (error) { incomes = previous; renderIncomes(); showIncomeMessage(error.message, true); return; }
   showToast('Income restored successfully.');
+}
+
+async function permanentlyDeleteIncome(incomeId) {
+  const income = incomes.find((item) => item.id === incomeId);
+  if (!income || !window.confirm(`Permanently delete "${income.source}"? This cannot be undone.`)) return;
+  const previous = incomes;
+  incomes = incomes.filter((item) => item.id !== incomeId);
+  renderIncomes();
+  const { error } = await supabase.from('incomes').delete().eq('id', incomeId).eq('user_id', currentUser.id).eq('is_deleted', true);
+  if (error) { incomes = previous; renderIncomes(); showIncomeMessage(error.message, true); return; }
+  showToast('Income permanently deleted.');
 }
 
 function setAppView(view) {
@@ -737,7 +749,7 @@ function renderAllExpenses() {
   allExpensesPage = Math.min(allExpensesPage, totalPages);
   const pageRows = groupedExpenses.slice((allExpensesPage - 1) * pageSize, allExpensesPage * pageSize);
   const expenseAction = isDeletedView
-    ? (expense) => `<button type="button" data-restore-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore invoice"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
+    ? (expense) => `<div class="inline-flex items-center gap-1"><button type="button" data-restore-all-expense="${escapeHtml(expense.id)}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore invoice"><i data-lucide="undo-2" class="h-4 w-4"></i></button><button type="button" data-permanent-delete-expense="${escapeHtml(expense.id)}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Permanently delete invoice"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div>`
     : (expense) => `<button type="button" data-delete-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete invoice"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
   allExpensesTableBody.innerHTML = pageRows.map((expense) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(expense.item_name || expense.title)}</p><p class="text-xs font-normal text-slate-500">${escapeHtml(expense.quantity || 1)} ${escapeHtml(expense.unit || 'pcs')}${expense.note ? ` · ${escapeHtml(expense.note)}` : ''}</p></div></td><td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">${escapeHtml(expense.expense_type || expense.category || 'All Cost')}</span></td><td class="px-5 py-4 text-sm text-slate-600">${formatTaka(expense.unit_price || expense.amount)}</td><td class="px-5 py-4 font-['Space_Grotesk'] text-sm font-bold text-slate-900">${formatTaka(expense.total_amount || expense.amount)}</td><td class="px-5 py-4 text-sm text-slate-600">${escapeHtml(expense.added_by || 'You')}</td><td class="px-5 py-4 text-right"><div class="inline-flex items-center gap-1">${!isDeletedView ? `<button type="button" data-edit-all-expense="${escapeHtml(expense.sourceRows[0]?.id || expense.id)}" class="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-600" aria-label="Edit expense"><i data-lucide="pencil" class="h-4 w-4"></i></button>` : ''}${expenseAction(expense)}</div></td></tr>`).join('');
   allExpensesEmpty.classList.toggle('hidden', pageRows.length > 0);
@@ -748,6 +760,7 @@ function renderAllExpenses() {
   expenseNextPage.disabled = allExpensesPage === totalPages;
   allExpensesTableBody.querySelectorAll('[data-delete-all-expense]').forEach((button) => button.addEventListener('click', () => softDeleteExpense(button.dataset.deleteAllExpense)));
   allExpensesTableBody.querySelectorAll('[data-restore-all-expense]').forEach((button) => button.addEventListener('click', () => restoreExpense(button.dataset.restoreAllExpense)));
+  allExpensesTableBody.querySelectorAll('[data-permanent-delete-expense]').forEach((button) => button.addEventListener('click', () => permanentlyDeleteExpense(button.dataset.permanentDeleteExpense)));
   allExpensesTableBody.querySelectorAll('[data-edit-all-expense]').forEach((button) => button.addEventListener('click', () => {
     const expense = allExpenses.find((item) => item.id === button.dataset.editAllExpense);
     if (!expense) return;
@@ -828,6 +841,21 @@ async function restoreExpense(expenseId) {
     : await supabase.from('expenses').update({ is_deleted: false }).eq('id', expenseId).eq('user_id', currentUser.id);
   if (error) { allExpenses = previous; renderAllExpenses(); showToast(error.message, true); return; }
   showToast('Expense restored successfully.');
+}
+
+async function permanentlyDeleteExpense(expenseId) {
+  const target = allExpenses.find((expense) => expense.id === expenseId || expense.invoice_id === expenseId);
+  if (!target || !window.confirm(`Permanently delete "${target.item_name || target.title || 'this invoice'}"? This cannot be undone.`)) return;
+  const previous = allExpenses;
+  const targetIds = target.invoice_id ? allExpenses.filter((expense) => expense.invoice_id === target.invoice_id).map((expense) => expense.id) : [target.id];
+  allExpenses = allExpenses.filter((expense) => !targetIds.includes(expense.id));
+  renderAllExpenses();
+  const query = target.invoice_id
+    ? supabase.from('expenses').delete().eq('invoice_id', target.invoice_id).eq('user_id', currentUser.id).eq('is_deleted', true)
+    : supabase.from('expenses').delete().eq('id', target.id).eq('user_id', currentUser.id).eq('is_deleted', true);
+  const { error } = await query;
+  if (error) { allExpenses = previous; renderAllExpenses(); showToast(error.message, true); return; }
+  showToast('Expense permanently deleted.');
 }
 
 function showExpenseMessage(message, isError = false) {
