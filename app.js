@@ -114,6 +114,13 @@ const expenseNextPage = document.querySelector('#expenseNextPage');
 const membersView = document.querySelector('#membersView');
 const membersTableBody = document.querySelector('#membersTableBody');
 const membersEmpty = document.querySelector('#membersEmpty');
+const reportsView = document.querySelector('#reportsView');
+const reportTableBody = document.querySelector('#reportTableBody');
+const reportSummaryIncome = document.querySelector('#reportSummaryIncome');
+const reportSummaryExpense = document.querySelector('#reportSummaryExpense');
+const reportSummaryBalance = document.querySelector('#reportSummaryBalance');
+const reportSummaryAverage = document.querySelector('#reportSummaryAverage');
+const reportRangeSelect = document.querySelector('#reportRangeSelect');
 const userRoleFilter = document.querySelector('#userRoleFilter');
 const addUserButton = document.querySelector('#addUserButton');
 const addUserModal = document.querySelector('#addUserModal');
@@ -305,6 +312,7 @@ function setAppView(view) {
   expenseMemoView.classList.toggle('hidden', view !== 'memo');
   allExpensesView.classList.toggle('hidden', view !== 'all' && view !== 'deleted');
   expenseTypesView.classList.toggle('hidden', view !== 'types');
+  reportsView.classList.toggle('hidden', view !== 'reports');
   membersView.classList.toggle('hidden', view !== 'members');
   if (view === 'memo' && !memoRows.children.length) addMemoRow();
   if (view === 'types') loadExpenseTypes();
@@ -312,6 +320,96 @@ function setAppView(view) {
   if (view === 'income' || view === 'deleted-income') loadIncomes(view === 'deleted-income');
   if (view === 'all' || view === 'deleted') loadAllExpenses(view === 'deleted');
   if (view === 'members') loadMembers();
+  if (view === 'reports') loadReportsData();
+}
+
+function formatReportMonth(stepKey) {
+  const [year, month] = stepKey.split('-');
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString('en-BD', { month: 'short', year: 'numeric' });
+}
+
+function buildMonthlyReportRows() {
+  const monthMap = new Map();
+  const recordMonths = [];
+
+  const pushMonth = (dateString) => {
+    if (!dateString) return;
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!monthMap.has(key)) {
+      monthMap.set(key, { income: 0, expense: 0 });
+      recordMonths.push(key);
+    }
+  };
+
+  incomes.filter((income) => !income.is_deleted).forEach((income) => pushMonth(income.income_date));
+  allExpenses.filter((expense) => !expense.is_deleted).forEach((expense) => pushMonth(expense.expense_date));
+
+  if (!recordMonths.length) {
+    const today = new Date();
+    for (let index = 5; index >= 0; index -= 1) {
+      const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthMap.set(key, { income: 0, expense: 0 });
+      recordMonths.push(key);
+    }
+  }
+
+  recordMonths.sort();
+  const reportRows = recordMonths.map((key) => {
+    const income = incomes.filter((item) => !item.is_deleted && item.income_date && `${new Date(`${item.income_date}T00:00:00`).getFullYear()}-${String(new Date(`${item.income_date}T00:00:00`).getMonth() + 1).padStart(2, '0')}` === key).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const expense = allExpenses.filter((item) => !item.is_deleted && item.expense_date && `${new Date(`${item.expense_date}T00:00:00`).getFullYear()}-${String(new Date(`${item.expense_date}T00:00:00`).getMonth() + 1).padStart(2, '0')}` === key).reduce((sum, item) => sum + Number(item.total_amount || item.amount || 0), 0);
+    return { key, income, expense, balance: income - expense };
+  });
+
+  return reportRows;
+}
+
+function renderReports() {
+  const allRows = buildMonthlyReportRows();
+  const rangeMonths = Number(reportRangeSelect?.value || 12);
+  const rows = allRows.slice(-rangeMonths);
+  const totalIncome = rows.reduce((sum, row) => sum + row.income, 0);
+  const totalExpense = rows.reduce((sum, row) => sum + row.expense, 0);
+  const totalBalance = totalIncome - totalExpense;
+  const average = rows.length ? totalExpense / rows.length : 0;
+
+  reportSummaryIncome.textContent = formatTaka(totalIncome);
+  reportSummaryExpense.textContent = formatTaka(totalExpense);
+  reportSummaryBalance.textContent = formatTaka(totalBalance);
+  reportSummaryAverage.textContent = formatTaka(average);
+
+  reportTableBody.innerHTML = rows.map((row) => `
+    <tr class="transition hover:bg-slate-50">
+      <td class="px-5 py-4 text-sm font-semibold text-slate-800">${formatReportMonth(row.key)}</td>
+      <td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-emerald-600">${formatTaka(row.income)}</td>
+      <td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-rose-600">${formatTaka(row.expense)}</td>
+      <td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold ${row.balance >= 0 ? 'text-slate-900' : 'text-amber-600'}">${formatTaka(row.balance)}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadReportsData() {
+  if (!currentUser) return;
+  const [incomeResult, expenseResult] = await Promise.all([
+    supabase.from('incomes').select('id, source, amount, income_date, note, is_deleted').eq('user_id', currentUser.id).order('income_date', { ascending: true }),
+    supabase.from('expenses').select('id, item_name, title, expense_date, total_amount, amount, is_deleted').eq('user_id', currentUser.id).order('expense_date', { ascending: true }),
+  ]);
+
+  if (incomeResult.error) {
+    showToast(incomeResult.error.message, true);
+    return;
+  }
+  if (expenseResult.error) {
+    showToast(expenseResult.error.message, true);
+    return;
+  }
+
+  incomes = incomeResult.data || [];
+  allExpenses = expenseResult.data || [];
+  renderReports();
 }
 
 function renderMemoTotal() {
@@ -684,7 +782,7 @@ async function showDashboard(isVisible, user = currentUser) {
     await loadExpenses();
     subscribeToExpenses();
     const route = window.location.hash;
-    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#members' ? 'members' : 'dashboard');
+    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
   } else {
     unsubscribeFromExpenses();
   }
@@ -1111,11 +1209,14 @@ document.querySelectorAll('.nav-item').forEach((item) => {
     });
     item.classList.add('bg-navy', 'text-white', 'shadow-lg', 'shadow-navy/10');
     item.classList.remove('text-slate-500');
-        setAppView(item.dataset.nav === 'Income' ? 'income' : item.dataset.nav === 'Members' ? 'members' : 'dashboard');
+        const route = item.dataset.nav === 'Dashboard' ? '#dashboard' : item.dataset.nav === 'Reports' ? '#reports' : item.dataset.nav === 'Members' ? '#members' : '#dashboard';
+    window.location.hash = route;
+    setAppView(item.dataset.nav === 'Dashboard' ? 'dashboard' : item.dataset.nav === 'Reports' ? 'reports' : item.dataset.nav === 'Members' ? 'members' : 'dashboard');
     setSidebar(false);
   });
 });
 
+if (reportRangeSelect) reportRangeSelect.addEventListener('change', renderReports);
 userRoleFilter.addEventListener('change', renderMembers);
 addUserButton.addEventListener('click', () => setAddUserModal(true));
 closeAddUserModal.addEventListener('click', () => setAddUserModal(false));

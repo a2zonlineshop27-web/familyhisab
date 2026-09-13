@@ -234,6 +234,60 @@
           </div>
         </div>
       </section>
+      <section id="reportsView" class="hidden mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10" aria-labelledby="reportsTitle">
+        <div class="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div class="flex items-center gap-3">
+            <span class="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-violet-600"><i data-lucide="chart-no-axes-combined" class="h-5 w-5"></i></span>
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-violet-600">Finance summary</p>
+              <h2 id="reportsTitle" class="mt-1 font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-slate-900">Monthly Report</h2>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <label for="reportRangeSelect" class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Range</label>
+            <select id="reportRangeSelect" class="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10">
+              <option value="3">Last 3 months</option>
+              <option value="6">Last 6 months</option>
+              <option value="12" selected>Last 12 months</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+            <p class="text-sm font-medium text-slate-500">Income</p>
+            <p id="reportSummaryIncome" class="mt-3 font-['Space_Grotesk'] text-2xl font-bold text-emerald-600">৳ 0.00</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+            <p class="text-sm font-medium text-slate-500">Expense</p>
+            <p id="reportSummaryExpense" class="mt-3 font-['Space_Grotesk'] text-2xl font-bold text-rose-600">৳ 0.00</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+            <p class="text-sm font-medium text-slate-500">Net balance</p>
+            <p id="reportSummaryBalance" class="mt-3 font-['Space_Grotesk'] text-2xl font-bold text-slate-900">৳ 0.00</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+            <p class="text-sm font-medium text-slate-500">Avg. monthly expense</p>
+            <p id="reportSummaryAverage" class="mt-3 font-['Space_Grotesk'] text-2xl font-bold text-amber-600">৳ 0.00</p>
+          </article>
+        </div>
+
+        <section class="mt-7 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[720px] text-left">
+              <thead class="bg-slate-800 text-xs font-bold uppercase tracking-[0.14em] text-white">
+                <tr>
+                  <th class="px-5 py-3.5">Month</th>
+                  <th class="px-5 py-3.5 text-right">Income</th>
+                  <th class="px-5 py-3.5 text-right">Expense</th>
+                  <th class="px-5 py-3.5 text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="reportTableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
       <section id="expenseTypesView" class="hidden mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10" aria-labelledby="expenseTypesTitle">
         <div class="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-cyan-50 text-blue-600"><i data-lucide="tags" class="h-5 w-5"></i></span><div><p class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Manage categories</p><h2 id="expenseTypesTitle" class="mt-1 font-['Space_Grotesk'] text-2xl font-bold tracking-tight text-slate-900">Expense Type</h2></div></div>
