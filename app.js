@@ -467,6 +467,7 @@ function renderExpenseReport() {
   const heads = [...new Set(activeExpenses.map((expense) => expense.expense_type || expense.category || 'Other Expense'))].sort();
   expenseReportHeadFilter.innerHTML = `<option value="all">All Expense Head</option>${heads.map((head) => `<option value="${escapeHtml(head)}">${escapeHtml(head)}</option>`).join('')}`;
   expenseReportHeadFilter.value = heads.includes(selectedHead) ? selectedHead : 'all';
+  if (!expenseReportTableBody) return;
   const rows = getFilteredExpenseReportRows();
   const grouped = new Map();
   rows.forEach((expense) => {
