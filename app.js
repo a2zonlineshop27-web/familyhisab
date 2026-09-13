@@ -124,6 +124,8 @@ const reportSummaryExpense = document.querySelector('#reportSummaryExpense');
 const reportSummaryBalance = document.querySelector('#reportSummaryBalance');
 const reportSummaryAverage = document.querySelector('#reportSummaryAverage');
 const reportRangeSelect = document.querySelector('#reportRangeSelect');
+const dashboardChart = document.querySelector('#dashboardChart');
+const dashboardChartLabels = document.querySelector('#dashboardChartLabels');
 const cashInHandTableBody = document.querySelector('#cashInHandTableBody');
 const incomeStatementTableBody = document.querySelector('#incomeStatementTableBody');
 const expenseReportTableBody = document.querySelector('#expenseReportTableBody');
@@ -295,6 +297,7 @@ function renderIncomes() {
   incomeTableBody.querySelectorAll('[data-delete-income]').forEach((button) => button.addEventListener('click', () => deleteIncome(button.dataset.deleteIncome)));
   incomeTableBody.querySelectorAll('[data-restore-income]').forEach((button) => button.addEventListener('click', () => restoreIncome(button.dataset.restoreIncome)));
   if (window.lucide) lucide.createIcons();
+  renderDashboardChart();
 }
 
 async function loadIncomes(includeDeleted = false) {
@@ -762,6 +765,43 @@ function renderExpenses(expenses) {
   expensesTableBody.innerHTML = expenses.map((expense) => `<tr><td class="py-4 pr-4"><p class="max-w-[180px] truncate text-sm font-bold text-ink">${escapeHtml(expense.title)}</p><p class="mt-1 text-[11px] text-slate-400">Added ${new Date(expense.created_at).toLocaleDateString('en-GB')}</p></td><td class="py-4 pr-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">${escapeHtml(expense.category)}</span></td><td class="py-4 pr-4 text-xs text-slate-500">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="py-4 pr-4 text-right text-sm font-bold text-ink">${formatCurrency(expense.amount)}</td><td class="py-4 text-right"><button type="button" data-delete-expense="${escapeHtml(expense.id)}" class="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(expense.title)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></td></tr>`).join('');
   expensesTableBody.querySelectorAll('[data-delete-expense]').forEach((button) => button.addEventListener('click', () => deleteExpense(button.dataset.deleteExpense)));
   if (window.lucide) lucide.createIcons();
+  renderDashboardChart();
+}
+
+function renderDashboardChart() {
+  if (!dashboardChart || !dashboardChartLabels) return;
+  const monthMap = new Map();
+  const addMonth = (dateString, field, amount) => {
+    if (!dateString) return;
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const row = monthMap.get(key) || { income: 0, expense: 0 };
+    row[field] += Number(amount || 0);
+    monthMap.set(key, row);
+  };
+  incomes.filter((income) => !income.is_deleted).forEach((income) => addMonth(income.income_date, 'income', income.amount));
+  allExpenses.filter((expense) => !expense.is_deleted).forEach((expense) => addMonth(expense.expense_date, 'expense', getExpenseAmount(expense)));
+  const months = [...monthMap.keys()].sort().slice(-6);
+  while (months.length < 6) {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - months.length));
+    months.unshift(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+    if (!monthMap.has(months[0])) monthMap.set(months[0], { income: 0, expense: 0 });
+  }
+  const maxAmount = Math.max(1, ...months.flatMap((month) => [monthMap.get(month)?.income || 0, monthMap.get(month)?.expense || 0]));
+  const totalIncome = incomes.filter((income) => !income.is_deleted).reduce((sum, income) => sum + Number(income.amount || 0), 0);
+  const totalExpense = allExpenses.filter((expense) => !expense.is_deleted).reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
+  document.querySelector('#dashboardIncomeTotal').textContent = formatTaka(totalIncome);
+  document.querySelector('#dashboardExpenseTotal').textContent = formatTaka(totalExpense);
+  document.querySelector('#dashboardBalanceTotal').textContent = formatTaka(totalIncome - totalExpense);
+  dashboardChart.innerHTML = months.map((month) => {
+    const row = monthMap.get(month) || { income: 0, expense: 0 };
+    const incomeHeight = Math.max(row.income ? 6 : 2, Math.round((row.income / maxAmount) * 160));
+    const expenseHeight = Math.max(row.expense ? 6 : 2, Math.round((row.expense / maxAmount) * 160));
+    return `<div class="flex min-w-0 flex-1 items-end justify-center gap-1" title="${formatReportMonth(month)}: ${formatTaka(row.income)} income, ${formatTaka(row.expense)} expense"><span class="w-2.5 rounded-t-md bg-emerald-400 transition-all duration-500 sm:w-4" style="height:${incomeHeight}px"></span><span class="w-2.5 rounded-t-md bg-rose-400 transition-all duration-500 sm:w-4" style="height:${expenseHeight}px"></span></div>`;
+  }).join('');
+  dashboardChartLabels.innerHTML = months.map((month) => `<span class="min-w-0 flex-1 text-center text-[9px] font-semibold text-slate-400">${formatReportMonth(month).split(' ')[0]}</span>`).join('');
 }
 
 async function loadExpenses() {
@@ -771,7 +811,8 @@ async function loadExpenses() {
     showExpenseMessage(error.message, true);
     return;
   }
-  renderExpenses(data || []);
+  allExpenses = data || [];
+  renderExpenses(allExpenses);
 }
 
 async function deleteExpense(expenseId) {
@@ -929,7 +970,7 @@ async function showDashboard(isVisible, user = currentUser, forceDashboard = fal
     incomeDate.value = new Date().toISOString().slice(0, 10);
     await syncSignupProfile(currentUser);
     await loadProfile();
-    await loadExpenses();
+    await Promise.all([loadExpenses(), loadIncomes()]);
     subscribeToExpenses();
     if (forceDashboard) window.location.hash = '#dashboard';
     const route = window.location.hash;
