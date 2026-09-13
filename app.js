@@ -276,8 +276,10 @@ function setupIncomeTableForm() {
 }
 
 setupIncomeTableForm();
+const incomeTypeLayout = incomeTypeForm.parentElement;
 incomeTypeModalContent.appendChild(incomeTypeForm);
 incomeTypeForm.parentElement.className = 'mt-0';
+incomeTypeLayout.className = 'mt-7';
 
 function showIncomeTypeMessage(message, isError = false) {
   incomeTypeMessage.textContent = message;
