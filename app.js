@@ -183,6 +183,7 @@ let showingDeletedExpenses = false;
 let allExpensesLoadId = 0;
 let memoRowId = 0;
 let editingExpenseId = null;
+let editingIncomeId = null;
 let members = [];
 let expenseTypes = [];
 
@@ -373,7 +374,19 @@ function renderAllIncome() {
   document.querySelector('#allIncomeFilteredTotal').textContent = formatTaka(total);
   document.querySelector('#allIncomeFilteredCount').textContent = String(rows.length);
   allIncomeEmpty.classList.toggle('hidden', rows.length > 0);
-  allIncomeTableBody.innerHTML = rows.map((income) => `<tr class="transition hover:bg-emerald-50/40"><td class="px-5 py-4 text-sm font-bold text-slate-800">${escapeHtml(income.source)}</td><td class="px-5 py-4 text-sm text-slate-500">${escapeHtml(income.note || 'No note')}</td><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${income.income_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-emerald-700">${formatTaka(income.amount)}</td><td class="px-5 py-4 text-right"><button type="button" data-all-income-delete="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(income.source)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></td></tr>`).join('');
+  allIncomeTableBody.innerHTML = rows.map((income) => `<tr class="transition hover:bg-emerald-50/40"><td class="px-5 py-4 text-sm font-bold text-slate-800">${escapeHtml(income.source)}</td><td class="px-5 py-4 text-sm text-slate-500">${escapeHtml(income.note || 'No note')}</td><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${income.income_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4 text-right font-['Space_Grotesk'] text-sm font-bold text-emerald-700">${formatTaka(income.amount)}</td><td class="px-5 py-4 text-right"><div class="inline-flex items-center gap-1"><button type="button" data-edit-all-income="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-blue-50 hover:text-blue-600" aria-label="Edit ${escapeHtml(income.source)}"><i data-lucide="pencil" class="h-4 w-4"></i></button><button type="button" data-all-income-delete="${escapeHtml(income.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(income.source)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div></td></tr>`).join('');
+  allIncomeTableBody.querySelectorAll('[data-edit-all-income]').forEach((button) => button.addEventListener('click', () => {
+    const income = incomes.find((item) => item.id === button.dataset.editAllIncome);
+    if (!income) return;
+    editingIncomeId = income.id;
+    document.querySelector('#incomeSource').value = income.source || '';
+    document.querySelector('#incomeAmount').value = income.amount || '';
+    incomeDate.value = income.income_date || '';
+    document.querySelector('#incomeNote').value = income.note || '';
+    window.location.hash = '#income/add';
+    setAppView('income');
+    document.querySelector('#incomeSource').focus();
+  }));
   allIncomeTableBody.querySelectorAll('[data-all-income-delete]').forEach((button) => button.addEventListener('click', () => deleteIncome(button.dataset.allIncomeDelete)));
   if (window.lucide) lucide.createIcons();
 }
@@ -726,7 +739,7 @@ function renderAllExpenses() {
   const expenseAction = isDeletedView
     ? (expense) => `<button type="button" data-restore-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore invoice"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
     : (expense) => `<button type="button" data-delete-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete invoice"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
-  allExpensesTableBody.innerHTML = pageRows.map((expense) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(expense.item_name || expense.title)}</p><p class="text-xs font-normal text-slate-500">${escapeHtml(expense.quantity || 1)} ${escapeHtml(expense.unit || 'pcs')}${expense.note ? ` · ${escapeHtml(expense.note)}` : ''}</p></div></td><td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">${escapeHtml(expense.expense_type || expense.category || 'All Cost')}</span></td><td class="px-5 py-4 text-sm text-slate-600">${formatTaka(expense.unit_price || expense.amount)}</td><td class="px-5 py-4 font-['Space_Grotesk'] text-sm font-bold text-slate-900">${formatTaka(expense.total_amount || expense.amount)}</td><td class="px-5 py-4 text-sm text-slate-600">${escapeHtml(expense.added_by || 'You')}</td><td class="px-5 py-4 text-right">${expenseAction(expense)}</td></tr>`).join('');
+  allExpensesTableBody.innerHTML = pageRows.map((expense) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(expense.item_name || expense.title)}</p><p class="text-xs font-normal text-slate-500">${escapeHtml(expense.quantity || 1)} ${escapeHtml(expense.unit || 'pcs')}${expense.note ? ` · ${escapeHtml(expense.note)}` : ''}</p></div></td><td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">${escapeHtml(expense.expense_type || expense.category || 'All Cost')}</span></td><td class="px-5 py-4 text-sm text-slate-600">${formatTaka(expense.unit_price || expense.amount)}</td><td class="px-5 py-4 font-['Space_Grotesk'] text-sm font-bold text-slate-900">${formatTaka(expense.total_amount || expense.amount)}</td><td class="px-5 py-4 text-sm text-slate-600">${escapeHtml(expense.added_by || 'You')}</td><td class="px-5 py-4 text-right"><div class="inline-flex items-center gap-1">${!isDeletedView ? `<button type="button" data-edit-all-expense="${escapeHtml(expense.sourceRows[0]?.id || expense.id)}" class="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-600" aria-label="Edit expense"><i data-lucide="pencil" class="h-4 w-4"></i></button>` : ''}${expenseAction(expense)}</div></td></tr>`).join('');
   allExpensesEmpty.classList.toggle('hidden', pageRows.length > 0);
   document.querySelector('#allExpensesMonthlyTotal').textContent = formatTaka(allExpenses.filter((expense) => new Date(expense.expense_date).getMonth() === new Date().getMonth()).reduce((sum, expense) => sum + Number(expense.total_amount || expense.amount || 0), 0));
   document.querySelector('#allExpensesTransactionCount').textContent = groupedExpenses.length;
@@ -739,6 +752,7 @@ function renderAllExpenses() {
     const expense = allExpenses.find((item) => item.id === button.dataset.editAllExpense);
     if (!expense) return;
     editingExpenseId = expense.id;
+    expenseMemoDate.value = expense.expense_date || '';
     memoRows.innerHTML = '';
     addMemoRow({ name: expense.item_name || expense.title, expenseType: expense.expense_type || expense.category, unit: expense.unit, quantity: expense.quantity, unitPrice: expense.unit_price || expense.amount });
     window.location.hash = '#expense/add';
@@ -1531,20 +1545,23 @@ incomeForm.addEventListener('submit', async (event) => {
   if (!currentUser) return;
   incomeSubmit.disabled = true;
   incomeMessage.classList.add('hidden');
-  const { error } = await supabase.from('incomes').insert({
-    user_id: currentUser.id,
+  const incomePayload = {
     source: document.querySelector('#incomeSource').value.trim(),
     amount: Number(document.querySelector('#incomeAmount').value),
     income_date: incomeDate.value,
     note: document.querySelector('#incomeNote').value.trim() || null,
-    is_deleted: false,
-  });
+  };
+  const { error } = editingIncomeId
+    ? await supabase.from('incomes').update(incomePayload).eq('id', editingIncomeId).eq('user_id', currentUser.id)
+    : await supabase.from('incomes').insert({ ...incomePayload, user_id: currentUser.id, is_deleted: false });
   incomeSubmit.disabled = false;
   if (error) { showIncomeMessage(error.message, true); return; }
+  const wasEditing = Boolean(editingIncomeId);
+  editingIncomeId = null;
   incomeForm.reset();
   incomeDate.value = new Date().toISOString().slice(0, 10);
   await loadIncomes();
-  showToast('Income saved successfully.');
+  showToast(wasEditing ? 'Income updated successfully.' : 'Income saved successfully.');
 });
 incomeTypeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1571,7 +1588,7 @@ expenseMemoForm.addEventListener('submit', async (event) => {
   saveButton.disabled = true;
   const invoiceId = editingExpenseId ? null : crypto.randomUUID();
   const { error } = editingExpenseId
-    ? await supabase.from('expenses').update({ ...rows[0], total_amount: rows[0].quantity * rows[0].unit_price }).eq('id', editingExpenseId).eq('user_id', currentUser.id)
+    ? await supabase.from('expenses').update({ ...rows[0], title: rows[0].item_name, amount: rows[0].quantity * rows[0].unit_price, category: rows[0].expense_type, expense_date: expenseMemoDate.value, total_amount: rows[0].quantity * rows[0].unit_price }).eq('id', editingExpenseId).eq('user_id', currentUser.id)
     : await supabase.from('expenses').insert(rows.map((row) => {
       const totalAmount = row.quantity * row.unit_price;
       return { ...row, user_id: currentUser.id, invoice_id: invoiceId, title: row.item_name, amount: totalAmount, category: row.expense_type, expense_date: expenseMemoDate.value, total_amount: totalAmount, is_deleted: false };
