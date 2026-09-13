@@ -399,6 +399,7 @@ async function restoreIncome(incomeId) {
 function setAppView(view) {
   showingDeletedExpenses = view === 'deleted';
   clearExpensesButton.classList.toggle('hidden', showingDeletedExpenses);
+  document.querySelector('#allExpensesTitle').textContent = showingDeletedExpenses ? 'Deleted Expenses' : 'All Expenses';
   showingDeletedIncomes = view === 'deleted-income';
   dashboardMain.classList.toggle('hidden', view !== 'dashboard');
   incomeTypesView.classList.toggle('hidden', view !== 'income-types');
@@ -702,6 +703,8 @@ function getFilteredAllExpenses() {
 }
 
 function renderAllExpenses() {
+  const isDeletedView = window.location.hash === '#deleted-expenses';
+  showingDeletedExpenses = isDeletedView;
   const filtered = getFilteredAllExpenses();
   const invoiceGroups = new Map();
   filtered.forEach((expense) => {
@@ -720,7 +723,7 @@ function renderAllExpenses() {
   const totalPages = Math.max(1, Math.ceil(groupedExpenses.length / pageSize));
   allExpensesPage = Math.min(allExpensesPage, totalPages);
   const pageRows = groupedExpenses.slice((allExpensesPage - 1) * pageSize, allExpensesPage * pageSize);
-  const expenseAction = showingDeletedExpenses
+  const expenseAction = isDeletedView
     ? (expense) => `<button type="button" data-restore-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore invoice"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
     : (expense) => `<button type="button" data-delete-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete invoice"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
   allExpensesTableBody.innerHTML = pageRows.map((expense) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(expense.item_name || expense.title)}</p><p class="text-xs font-normal text-slate-500">${escapeHtml(expense.quantity || 1)} ${escapeHtml(expense.unit || 'pcs')}${expense.note ? ` · ${escapeHtml(expense.note)}` : ''}</p></div></td><td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">${escapeHtml(expense.expense_type || expense.category || 'All Cost')}</span></td><td class="px-5 py-4 text-sm text-slate-600">${formatTaka(expense.unit_price || expense.amount)}</td><td class="px-5 py-4 font-['Space_Grotesk'] text-sm font-bold text-slate-900">${formatTaka(expense.total_amount || expense.amount)}</td><td class="px-5 py-4 text-sm text-slate-600">${escapeHtml(expense.added_by || 'You')}</td><td class="px-5 py-4 text-right">${expenseAction(expense)}</td></tr>`).join('');
