@@ -202,6 +202,56 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 }
 
+const detailedExpenseCategories = [
+  { type: 'FISH', names: ['Rui', 'Boya', 'Elish', 'Pangash', 'Shrimp'] },
+  { type: 'MEAT', names: ['Beef', 'Chicken', 'Mutton', 'Duck'] },
+  { type: 'VEGETABLES & FRUITS', names: ['Potato', 'Tomato', 'Onion', 'Brinjal', 'Green Chili', 'Seasonal Fruits'] },
+  { type: 'GROCERIES & GRAINS', names: ['Rice', 'Flour (Atta)', 'Lentils (Dal)', 'Cooking Oil', 'Salt & Sugar', 'Milk & Baby Food'] },
+  { type: 'HOUSING', names: ['House Rent', 'Maintenance & Repairs', 'Property Tax / Service Charge'] },
+  { type: 'UTILITIES', names: ['Electricity Bill', 'Gas Bill', 'Water Bill', 'Internet & Wi-Fi', 'Mobile Recharge & SIM Bill'] },
+  { type: 'CLOTHING', names: ['Daily Wear Clothing', 'Special Occasion / Eid Shopping', 'Tailoring & Alteration'] },
+  { type: 'HEALTHCARE', names: ['Doctor Consultation', 'Pharmacy / Medicines', 'Medical Tests & Diagnostics'] },
+  { type: 'EDUCATION', names: ['School / College Fees', 'Books & Stationery', 'Coaching & Private Tuition'] },
+  { type: 'TRANSPORTATION', names: ['Rickshaw / Bus Fare', 'Bike Fuel', 'Ride Sharing'] },
+];
+
+async function ensureDetailedExpenseCategories() {
+  if (!currentUser) return false;
+  const { data: existing, error: loadError } = await supabase.from('expense_categories').select('id, name, parent_id, is_deleted').eq('family_id', currentUser.id);
+  if (loadError) { showToast(loadError.message, true); return false; }
+
+  const activeCategories = (existing || []).filter((category) => !category.is_deleted);
+  if (activeCategories.length) {
+    const { error } = await supabase.from('expense_categories').update({ is_deleted: true }).eq('family_id', currentUser.id).eq('is_deleted', false);
+    if (error) { showToast(error.message, true); return false; }
+  }
+
+  const categoryByName = new Map((existing || []).map((category) => [category.name, category]));
+  for (const category of detailedExpenseCategories) {
+    let parent = categoryByName.get(category.type);
+    if (parent) {
+      const { error } = await supabase.from('expense_categories').update({ parent_id: null, is_deleted: false }).eq('id', parent.id).eq('family_id', currentUser.id);
+      if (error) { showToast(error.message, true); return false; }
+    } else {
+      const { data, error } = await supabase.from('expense_categories').insert({ family_id: currentUser.id, name: category.type, parent_id: null, description: 'Expense type', is_deleted: false }).select('id, name, parent_id').single();
+      if (error) { showToast(error.message, true); return false; }
+      parent = data;
+      categoryByName.set(category.type, parent);
+    }
+    for (const name of category.names) {
+      const child = categoryByName.get(`${category.type}:${name}`) || (existing || []).find((item) => item.name === name && item.parent_id === parent.id);
+      if (child) {
+        const { error } = await supabase.from('expense_categories').update({ parent_id: parent.id, is_deleted: false }).eq('id', child.id).eq('family_id', currentUser.id);
+        if (error) { showToast(error.message, true); return false; }
+      } else {
+        const { error } = await supabase.from('expense_categories').insert({ family_id: currentUser.id, name, parent_id: parent.id, description: 'Expense name', is_deleted: false });
+        if (error) { showToast(error.message, true); return false; }
+      }
+    }
+  }
+  return true;
+}
+
 async function loadExpenseTypes() {
   if (!currentUser) return;
   const { data, error } = await supabase.from('expense_categories').select('id, family_id, name, parent_id, description, is_deleted').eq('family_id', currentUser.id).eq('is_deleted', false).order('name');
@@ -1162,6 +1212,7 @@ async function showDashboard(isVisible, user = currentUser, forceDashboard = fal
   dashboardView.classList.toggle('hidden', !isVisible);
   if (isVisible) {
     currentUser = user;
+    await ensureDetailedExpenseCategories();
     expenseDate.value = new Date().toISOString().slice(0, 10);
     expenseMemoDate.value = new Date().toISOString().slice(0, 10);
     incomeDate.value = new Date().toISOString().slice(0, 10);
