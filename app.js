@@ -774,8 +774,6 @@ async function softDeleteExpense(expenseId) {
   const { data: deletedExpense, error: verifyError } = await verifyQuery;
   if (verifyError || !deletedExpense) { allExpenses = previous; renderAllExpenses(); showToast(verifyError?.message || 'Expense could not be deleted.', true); return; }
   showToast('Expense moved to Deleted Expenses.');
-  window.location.hash = '#deleted-expenses';
-  setAppView('deleted');
 }
 
 async function clearAllExpenses() {
@@ -803,8 +801,6 @@ async function clearAllExpenses() {
     return;
   }
   showToast('All expenses moved to Deleted Expenses.');
-  window.location.hash = '#deleted-expenses';
-  setAppView('deleted');
 }
 
 async function restoreExpense(expenseId) {
