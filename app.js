@@ -103,6 +103,9 @@ const incomeTypeDescription = document.querySelector('#incomeTypeDescription');
 const incomeTypeMessage = document.querySelector('#incomeTypeMessage');
 const incomeTypesTableBody = document.querySelector('#incomeTypesTableBody');
 const incomeTypesEmpty = document.querySelector('#incomeTypesEmpty');
+const incomeTypeModal = document.querySelector('#incomeTypeModal');
+const incomeTypeModalContent = document.querySelector('#incomeTypeModalContent');
+const closeIncomeTypeModal = document.querySelector('#closeIncomeTypeModal');
 let incomes = [];
 let incomeTypes = [];
 let showingDeletedIncomes = false;
@@ -273,10 +276,18 @@ function setupIncomeTableForm() {
 }
 
 setupIncomeTableForm();
+incomeTypeModalContent.appendChild(incomeTypeForm);
+incomeTypeForm.parentElement.className = 'mt-0';
 
 function showIncomeTypeMessage(message, isError = false) {
   incomeTypeMessage.textContent = message;
   incomeTypeMessage.className = `rounded-xl px-3 py-2 text-xs leading-5 ${isError ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`;
+}
+
+function setIncomeTypeModal(isOpen) {
+  incomeTypeModal.classList.toggle('hidden', !isOpen);
+  incomeTypeModal.classList.toggle('flex', isOpen);
+  if (isOpen) incomeTypeName.focus();
 }
 
 async function loadIncomeTypes() {
@@ -1442,7 +1453,9 @@ expenseTypeForm.addEventListener('submit', async (event) => {
   closeExpenseTypeModal();
 });
 document.querySelector('#addMemoRow').addEventListener('click', () => addMemoRow());
-document.querySelector('#addIncomeTypeButton').addEventListener('click', () => incomeTypeName.focus());
+document.querySelector('#addIncomeTypeButton').addEventListener('click', () => setIncomeTypeModal(true));
+closeIncomeTypeModal.addEventListener('click', () => setIncomeTypeModal(false));
+incomeTypeModal.addEventListener('click', (event) => { if (event.target === incomeTypeModal) setIncomeTypeModal(false); });
 document.querySelector('#memoBackButton').addEventListener('click', () => { window.location.hash = '#dashboard'; setAppView('dashboard'); });
 document.querySelector('#newExpenseButton').addEventListener('click', () => { window.location.hash = '#expense/add'; setAppView('memo'); });
 incomeForm.addEventListener('submit', async (event) => {
@@ -1473,6 +1486,7 @@ incomeTypeForm.addEventListener('submit', async (event) => {
   const { error } = await supabase.from('income_categories').insert({ user_id: currentUser.id, name, description: incomeTypeDescription.value.trim() || null, is_deleted: false });
   if (error) { showIncomeTypeMessage(error.message, true); return; }
   incomeTypeForm.reset();
+  setIncomeTypeModal(false);
   await loadIncomeTypes();
   showToast('Income type added successfully.');
 });
