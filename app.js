@@ -76,6 +76,8 @@ const expenseTypeForm = document.querySelector('#expenseTypeForm');
 const expenseTypeParent = document.querySelector('#expenseTypeParent');
 const expenseTypeName = document.querySelector('#expenseTypeName');
 const expenseTypeDescription = document.querySelector('#expenseTypeDescription');
+const expenseTypeParentRequired = document.querySelector('#expenseTypeParentRequired');
+const expenseTypeParentHint = document.querySelector('#expenseTypeParentHint');
 const expenseTypeSearch = document.querySelector('#expenseTypeSearch');
 const expenseTypesTableBody = document.querySelector('#expenseTypesTableBody');
 const expenseTypesEmpty = document.querySelector('#expenseTypesEmpty');
@@ -160,6 +162,7 @@ let currentProfile = null;
 let expensesChannel = null;
 let resetStep = 'requestCode';
 let editingExpenseTypeId = null;
+let creatingExpenseName = false;
 let allExpenses = [];
 let allExpensesPage = 1;
 let showingDeletedExpenses = false;
@@ -183,6 +186,7 @@ async function loadExpenseTypes() {
   if (error) { showToast(error.message, true); return; }
   expenseTypes = data || [];
   renderExpenseTypes();
+  refreshMemoExpenseTypeOptions();
 }
 
 function renderExpenseTypes() {
@@ -208,12 +212,16 @@ function setExpenseTypesView(isVisible) {
   if (isVisible) loadExpenseTypes();
 }
 
-function openExpenseTypeModal(typeId = null) {
+function openExpenseTypeModal(typeId = null, asExpenseName = false) {
   editingExpenseTypeId = typeId;
+  creatingExpenseName = asExpenseName;
   const type = expenseTypes.find((item) => item.id === typeId);
-  expenseTypeModalTitle.textContent = type ? 'Edit Expense Item / Type' : 'Add Expense Item / Type';
+  expenseTypeModalTitle.textContent = type ? 'Edit Expense Item / Type' : asExpenseName ? 'Add Expense Name' : 'Add Expense Type';
   expenseTypeParent.innerHTML = `<option value="">+ Create as New Main Type</option>${expenseTypes.filter((item) => !item.parent_id && item.id !== typeId).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}`;
   expenseTypeParent.value = type?.parent_id || '';
+  expenseTypeParent.required = asExpenseName;
+  expenseTypeParentRequired.classList.toggle('hidden', !asExpenseName);
+  expenseTypeParentHint.textContent = asExpenseName ? 'Choose the parent type for this expense name.' : 'Leave empty to create a main expense type.';
   expenseTypeName.value = type?.name || '';
   expenseTypeDescription.value = type?.description || '';
   expenseTypeModal.classList.remove('hidden');
@@ -226,7 +234,11 @@ function closeExpenseTypeModal() {
   expenseTypeModal.classList.remove('flex');
   expenseTypeForm.reset();
   editingExpenseTypeId = null;
-  expenseTypeModalTitle.textContent = 'Add Expense Item / Type';
+  creatingExpenseName = false;
+  expenseTypeParent.required = false;
+  expenseTypeParentRequired.classList.add('hidden');
+  expenseTypeParentHint.textContent = 'Leave empty to create a main expense type.';
+  expenseTypeModalTitle.textContent = 'Add Expense Type';
 }
 
 function showToast(message, isError = false) {
@@ -340,7 +352,10 @@ function setAppView(view) {
   incomeStatementView.classList.toggle('hidden', view !== 'income-statement');
   expenseReportView.classList.toggle('hidden', view !== 'expense-report');
   membersView.classList.toggle('hidden', view !== 'members');
-  if (view === 'memo' && !memoRows.children.length) addMemoRow();
+  if (view === 'memo') {
+    if (!memoRows.children.length) addMemoRow();
+    loadExpenseTypes();
+  }
   if (view === 'types') loadExpenseTypes();
   if (view === 'income-types' || view === 'income') loadIncomeTypes();
   if (view === 'income' || view === 'deleted-income') loadIncomes(view === 'deleted-income');
@@ -570,12 +585,25 @@ function renderMemoTotal() {
   memoTotal.textContent = `৳ ${total.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function getExpenseTypeOptions(selectedValue = '') {
+  const parents = expenseTypes.filter((type) => !type.parent_id);
+  const orderedTypes = parents.flatMap((parent) => [parent, ...expenseTypes.filter((type) => type.parent_id === parent.id)]);
+  return `<option value="">Choose an expense type</option>${orderedTypes.map((type) => `<option value="${escapeHtml(type.name)}" ${type.name === selectedValue ? 'selected' : ''}>${type.parent_id ? `↳ ${escapeHtml(type.name)}` : escapeHtml(type.name)}</option>`).join('')}`;
+}
+
+function refreshMemoExpenseTypeOptions() {
+  memoRows.querySelectorAll('[data-field="expense-type"]').forEach((select) => {
+    const selectedValue = select.value;
+    select.innerHTML = getExpenseTypeOptions(selectedValue);
+  });
+}
+
 function addMemoRow(values = {}) {
   memoRowId += 1;
   const row = document.createElement('div');
   row.dataset.memoRow = String(memoRowId);
   row.className = 'grid gap-3 px-5 py-5 sm:grid-cols-[2fr_1.3fr_0.8fr_0.7fr_1fr_auto] sm:items-end';
-  row.innerHTML = `<div><label class="mb-2 block text-xs font-semibold text-slate-600">Item name</label><input data-field="name" required value="${escapeHtml(values.name || '')}" placeholder="Rui Fish" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Expense type</label><input data-field="expense-type" required value="${escapeHtml(values.expenseType || '')}" placeholder="Food & Groceries" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit</label><input data-field="unit" required value="${escapeHtml(values.unit || 'pcs')}" placeholder="kg" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Quantity</label><input data-field="quantity" required min="0.001" step="0.001" type="number" value="${values.quantity || 1}" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit price</label><input data-field="unit-price" required min="0.01" step="0.01" type="number" value="${values.unitPrice || ''}" placeholder="0.00" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><button type="button" data-remove-memo-row class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove item"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
+  row.innerHTML = `<div><label class="mb-2 block text-xs font-semibold text-slate-600">Item name</label><input data-field="name" required value="${escapeHtml(values.name || '')}" placeholder="Rui Fish" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Expense type <span class="text-rose-600">*</span></label><select data-field="expense-type" required class="h-10 w-full rounded-lg border border-slate-300 px-2 text-sm">${getExpenseTypeOptions(values.expenseType || '')}</select></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit</label><input data-field="unit" required value="${escapeHtml(values.unit || 'pcs')}" placeholder="kg" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Quantity</label><input data-field="quantity" required min="0.001" step="0.001" type="number" value="${values.quantity || 1}" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><div><label class="mb-2 block text-xs font-semibold text-slate-600">Unit price</label><input data-field="unit-price" required min="0.01" step="0.01" type="number" value="${values.unitPrice || ''}" placeholder="0.00" class="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></div><button type="button" data-remove-memo-row class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove item"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
   row.querySelectorAll('input').forEach((input) => input.addEventListener('input', renderMemoTotal));
   row.querySelector('[data-remove-memo-row]').addEventListener('click', () => { if (memoRows.children.length > 1) row.remove(); renderMemoTotal(); });
   memoRows.appendChild(row);
@@ -1334,6 +1362,7 @@ document.querySelector('#expenseTypesBack').addEventListener('click', () => {
   window.location.hash = '#dashboard';
 });
 document.querySelector('#addExpenseTypeButton').addEventListener('click', () => openExpenseTypeModal());
+document.querySelector('#addExpenseNameButton').addEventListener('click', () => openExpenseTypeModal(null, true));
 document.querySelector('#closeExpenseTypeModal').addEventListener('click', closeExpenseTypeModal);
 document.querySelector('#resetExpenseType').addEventListener('click', () => {
   expenseTypeForm.reset();
@@ -1351,6 +1380,11 @@ expenseTypeForm.addEventListener('submit', async (event) => {
   const name = expenseTypeName.value.trim();
   const description = expenseTypeDescription.value.trim();
   if (!currentUser || !name) return;
+  if (creatingExpenseName && !expenseTypeParent.value) {
+    showToast('Please select an Expense Type for this Expense Name.', true);
+    expenseTypeParent.focus();
+    return;
+  }
   const payload = { family_id: currentUser.id, name, parent_id: expenseTypeParent.value || null, description, is_deleted: false };
   const submitButton = expenseTypeForm.querySelector('button[type="submit"]');
   submitButton.disabled = true;
