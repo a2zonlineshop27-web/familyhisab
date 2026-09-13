@@ -1405,10 +1405,29 @@ if (expenseReportHeadFilter) expenseReportHeadFilter.addEventListener('change', 
 if (expenseReportMemberFilter) expenseReportMemberFilter.addEventListener('change', renderExpenseReport);
 if (expenseReportStartDate) expenseReportStartDate.addEventListener('change', renderExpenseReport);
 if (expenseReportEndDate) expenseReportEndDate.addEventListener('change', renderExpenseReport);
-if (expenseReportPdfButton) expenseReportPdfButton.addEventListener('click', () => window.print());
+function buildExpenseReportExportRows() {
+  return getFilteredExpenseReportRows().map((expense) => ({
+    type: expense.item_name || expense.title || 'Expense',
+    category: expense.expense_type || expense.category || 'Other Expense',
+    date: expense.expense_date || '',
+    object: 1,
+    amount: getExpenseAmount(expense),
+  }));
+}
+
+if (expenseReportPdfButton) expenseReportPdfButton.addEventListener('click', () => {
+  const rows = buildExpenseReportExportRows();
+  const total = rows.reduce((sum, row) => sum + row.amount, 0);
+  const printWindow = window.open('', '_blank', 'width=1000,height=700');
+  if (!printWindow) return showToast('Please allow pop-ups to print the expense report.', true);
+  printWindow.document.write(`<!doctype html><html><head><title>Expense Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:28px}h1{text-align:center;font-size:20px;margin:0 0 8px}p{color:#64748b;text-align:center;font-size:12px;margin:0 0 20px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#334155;color:#fff;text-align:left;padding:10px}td{border-bottom:1px solid #e2e8f0;padding:9px}td:last-child,th:last-child{text-align:right}.total td{background:#fff1f2;color:#be123c;font-weight:700}</style></head><body><h1>Expense Report</h1><p>${escapeHtml(expenseReportStartDate.value || 'All dates')} to ${escapeHtml(expenseReportEndDate.value || 'All dates')} · All members</p><table><thead><tr><th>Expense Type</th><th>Category</th><th>Date</th><th>Object</th><th>Amount</th></tr></thead><tbody>${rows.length ? rows.map((row) => `<tr><td>${escapeHtml(row.type)}</td><td>${escapeHtml(row.category)}</td><td>${escapeHtml(row.date)}</td><td>${row.object}</td><td>${formatTaka(row.amount)}</td></tr>`).join('') : '<tr><td colspan="5">No expenses found for this filter.</td></tr>'}</tbody><tfoot><tr class="total"><td colspan="4">TOTAL EXPENSE</td><td>${formatTaka(total)}</td></tr></tfoot></table></body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+});
 if (expenseReportCsvButton) expenseReportCsvButton.addEventListener('click', () => {
-  const rows = getFilteredExpenseReportRows();
-  const csv = [['Expense Type', 'Category', 'Date', 'Amount'], ...rows.map((expense) => [expense.item_name || expense.title || 'Expense', expense.expense_type || expense.category || 'Other Expense', expense.expense_date, getExpenseAmount(expense)])].map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const rows = buildExpenseReportExportRows();
+  const csv = [['Expense Type', 'Category', 'Date', 'Object', 'Amount'], ...rows.map((row) => [row.type, row.category, row.date, row.object, row.amount])].map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   link.download = 'expense-report.csv';
