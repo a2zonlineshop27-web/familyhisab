@@ -919,7 +919,7 @@ function renderMembers() {
   if (window.lucide) lucide.createIcons();
 }
 
-async function showDashboard(isVisible, user = currentUser) {
+async function showDashboard(isVisible, user = currentUser, forceDashboard = false) {
   authView.classList.toggle('hidden', isVisible);
   dashboardView.classList.toggle('hidden', !isVisible);
   if (isVisible) {
@@ -931,8 +931,10 @@ async function showDashboard(isVisible, user = currentUser) {
     await loadProfile();
     await loadExpenses();
     subscribeToExpenses();
+    if (forceDashboard) window.location.hash = '#dashboard';
     const route = window.location.hash;
     setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#reports/cash-in-hand' ? 'cash-in-hand' : route === '#reports/income-statement' ? 'income-statement' : route === '#reports/expense' ? 'expense-report' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
+    if (!route || route === '#dashboard') collapseNavigationMenus();
   } else {
     unsubscribeFromExpenses();
   }
@@ -1062,7 +1064,7 @@ authForm.addEventListener('submit', async (event) => {
     return;
   }
   currentUser = result.data.user;
-  await showDashboard(true, currentUser);
+  await showDashboard(true, currentUser, true);
 });
 
 expenseForm.addEventListener('submit', async (event) => {
@@ -1232,6 +1234,12 @@ function setReportsExpanded(isExpanded) {
   reportsChevron.classList.toggle('rotate-180', isExpanded);
 }
 
+function collapseNavigationMenus() {
+  setExpensesExpanded(false);
+  setIncomeExpanded(false);
+  setReportsExpanded(false);
+}
+
 function setActiveReportLink(activeLink) {
   reportLinks.forEach((link) => {
     const isActive = link === activeLink;
@@ -1395,6 +1403,7 @@ document.querySelectorAll('.nav-item').forEach((item) => {
         const route = item.dataset.nav === 'Dashboard' ? '#dashboard' : item.dataset.nav === 'Reports' ? '#reports' : item.dataset.nav === 'Members' ? '#members' : '#dashboard';
     window.location.hash = route;
     setAppView(item.dataset.nav === 'Dashboard' ? 'dashboard' : item.dataset.nav === 'Reports' ? 'reports' : item.dataset.nav === 'Members' ? 'members' : 'dashboard');
+    if (item.dataset.nav === 'Dashboard') collapseNavigationMenus();
     setSidebar(false);
   });
 });
@@ -1442,4 +1451,5 @@ addUserModal.addEventListener('click', (event) => { if (event.target === addUser
 addUserForm.addEventListener('submit', addMember);
 
 if (window.lucide) lucide.createIcons();
+collapseNavigationMenus();
 })();
