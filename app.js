@@ -81,6 +81,7 @@ const expenseTypeDescription = document.querySelector('#expenseTypeDescription')
 const expenseTypeParentRequired = document.querySelector('#expenseTypeParentRequired');
 const expenseTypeParentHint = document.querySelector('#expenseTypeParentHint');
 const expenseTypeSearch = document.querySelector('#expenseTypeSearch');
+const expenseTypeViewFilter = document.querySelector('#expenseTypeViewFilter');
 const expenseTypesTableBody = document.querySelector('#expenseTypesTableBody');
 const expenseTypesEmpty = document.querySelector('#expenseTypesEmpty');
 const expenseTypeModalTitle = document.querySelector('#expenseTypeModalTitle');
@@ -193,8 +194,10 @@ async function loadExpenseTypes() {
 
 function renderExpenseTypes() {
   const query = expenseTypeSearch.value.trim().toLowerCase();
+  const viewFilter = expenseTypeViewFilter.value;
   const matches = expenseTypes.filter((type) => `${type.name} ${type.description || ''}`.toLowerCase().includes(query));
-  const visibleTypes = expenseTypes.filter((type) => matches.includes(type) || matches.some((match) => match.id === type.parent_id));
+  const filteredTypes = viewFilter === 'names' ? expenseTypes.filter((type) => Boolean(type.parent_id)) : expenseTypes;
+  const visibleTypes = filteredTypes.filter((type) => matches.includes(type) || matches.some((match) => match.id === type.parent_id));
   const parents = visibleTypes.filter((type) => !type.parent_id);
   const orderedTypes = parents.flatMap((parent) => [parent, ...visibleTypes.filter((type) => type.parent_id === parent.id)]);
   expenseTypesTableBody.innerHTML = orderedTypes.map((type) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-xs font-semibold text-slate-500">${escapeHtml(type.id)}</td><td class="px-5 py-4 text-sm ${type.parent_id ? 'pl-10 font-medium text-slate-600' : 'font-semibold text-slate-800'}">${type.parent_id ? '<span class="mr-2 text-slate-300">↳</span>' : ''}${escapeHtml(type.name)}</td><td class="max-w-md px-5 py-4 text-sm text-slate-500">${escapeHtml(type.description || 'No description')}</td><td class="px-5 py-4 text-right"><div class="inline-flex items-center gap-1"><button type="button" data-edit-expense-type="${escapeHtml(type.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-blue-50 hover:text-blue-600" aria-label="Edit ${escapeHtml(type.name)}"><i data-lucide="pencil" class="h-4 w-4"></i></button><button type="button" data-delete-expense-type="${escapeHtml(type.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(type.name)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div></td></tr>`).join('');
@@ -219,7 +222,7 @@ function openExpenseTypeModal(typeId = null, asExpenseName = false) {
   creatingExpenseName = asExpenseName;
   const type = expenseTypes.find((item) => item.id === typeId);
   expenseTypeModalTitle.textContent = type ? 'Edit Expense Item / Type' : asExpenseName ? 'Add Expense Name' : 'Add Expense Type';
-  expenseTypeParent.innerHTML = `<option value="">+ Create as New Main Type</option>${expenseTypes.filter((item) => !item.parent_id && item.id !== typeId).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}`;
+  expenseTypeParent.innerHTML = `<option value="">Choose an Expense Type</option>${expenseTypes.filter((item) => !item.parent_id && item.id !== typeId).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}`;
   expenseTypeParent.value = type?.parent_id || '';
   expenseTypeParent.required = asExpenseName;
   expenseTypeParentField.classList.toggle('hidden', !asExpenseName && !type?.parent_id);
@@ -1368,7 +1371,10 @@ document.querySelector('#expenseTypesBack').addEventListener('click', () => {
   window.location.hash = '#dashboard';
 });
 document.querySelector('#addExpenseTypeButton').addEventListener('click', () => openExpenseTypeModal());
-document.querySelector('#addExpenseNameButton').addEventListener('click', () => openExpenseTypeModal(null, true));
+document.querySelector('#addExpenseNameButton').addEventListener('click', async () => {
+  if (!expenseTypes.length) await loadExpenseTypes();
+  openExpenseTypeModal(null, true);
+});
 document.querySelector('#closeExpenseTypeModal').addEventListener('click', closeExpenseTypeModal);
 document.querySelector('#resetExpenseType').addEventListener('click', closeExpenseTypeModal);
 expenseTypeModal.addEventListener('click', (event) => {
@@ -1378,6 +1384,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !expenseTypeModal.classList.contains('hidden')) closeExpenseTypeModal();
 });
 expenseTypeSearch.addEventListener('input', renderExpenseTypes);
+expenseTypeViewFilter.addEventListener('change', renderExpenseTypes);
 expenseTypeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = expenseTypeName.value.trim();
