@@ -119,6 +119,7 @@ let showingDeletedIncomes = false;
 const allExpensesView = document.querySelector('#allExpensesView');
 const allExpensesTableBody = document.querySelector('#allExpensesTableBody');
 const allExpensesEmpty = document.querySelector('#allExpensesEmpty');
+const newExpenseButton = document.querySelector('#newExpenseButton');
 const allExpensesSearch = document.querySelector('#allExpensesSearch');
 const expenseDateFilter = document.querySelector('#expenseDateFilter');
 const expenseTypeFilter = document.querySelector('#expenseTypeFilter');
@@ -184,6 +185,13 @@ let memoRowId = 0;
 let editingExpenseId = null;
 let members = [];
 let expenseTypes = [];
+
+const clearExpensesButton = document.createElement('button');
+clearExpensesButton.type = 'button';
+clearExpensesButton.className = 'inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold tracking-wide text-rose-700 transition hover:bg-rose-100';
+clearExpensesButton.innerHTML = '<i data-lucide="trash-2" class="h-4 w-4"></i> Clear Table';
+clearExpensesButton.addEventListener('click', clearAllExpenses);
+newExpenseButton?.parentElement?.appendChild(clearExpensesButton);
 
 function formatCurrency(amount) {
   return `BDT ${Number(amount || 0).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -390,6 +398,7 @@ async function restoreIncome(incomeId) {
 
 function setAppView(view) {
   showingDeletedExpenses = view === 'deleted';
+  clearExpensesButton.classList.toggle('hidden', showingDeletedExpenses);
   showingDeletedIncomes = view === 'deleted-income';
   dashboardMain.classList.toggle('hidden', view !== 'dashboard');
   incomeTypesView.classList.toggle('hidden', view !== 'income-types');
@@ -762,6 +771,35 @@ async function softDeleteExpense(expenseId) {
   const { data: deletedExpense, error: verifyError } = await verifyQuery;
   if (verifyError || !deletedExpense) { allExpenses = previous; renderAllExpenses(); showToast(verifyError?.message || 'Expense could not be deleted.', true); return; }
   showToast('Expense moved to Deleted Expenses.');
+  window.location.hash = '#deleted-expenses';
+  setAppView('deleted');
+}
+
+async function clearAllExpenses() {
+  if (showingDeletedExpenses || !currentUser || !allExpenses.length) {
+    showToast('There are no active expenses to clear.', true);
+    return;
+  }
+  if (!window.confirm('Move all expenses in this table to Deleted Expenses?')) return;
+
+  const previous = allExpenses;
+  allExpenses = [];
+  renderAllExpenses();
+  const { error } = await supabase.from('expenses').update({ is_deleted: true }).eq('user_id', currentUser.id).eq('is_deleted', false);
+  if (error) {
+    allExpenses = previous;
+    renderAllExpenses();
+    showToast(error.message, true);
+    return;
+  }
+
+  const { data: remainingExpenses, error: verifyError } = await supabase.from('expenses').select('id').eq('user_id', currentUser.id).eq('is_deleted', false).limit(1);
+  if (verifyError || remainingExpenses?.length) {
+    await loadAllExpenses(false);
+    showToast(verifyError?.message || 'Some expenses could not be cleared.', true);
+    return;
+  }
+  showToast('All expenses moved to Deleted Expenses.');
   window.location.hash = '#deleted-expenses';
   setAppView('deleted');
 }
