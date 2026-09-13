@@ -652,17 +652,30 @@ function getFilteredAllExpenses() {
 
 function renderAllExpenses() {
   const filtered = getFilteredAllExpenses();
+  const invoiceGroups = new Map();
+  filtered.forEach((expense) => {
+    const key = expense.invoice_id || expense.id;
+    const group = invoiceGroups.get(key) || { ...expense, id: key, invoice_id: expense.invoice_id, item_name: '', quantity: 0, total_amount: 0, amount: 0, unit_price: null, sourceRows: [] };
+    group.sourceRows.push(expense);
+    group.item_name = group.item_name ? `${group.item_name}, ${expense.item_name || expense.title || 'Expense'}` : (expense.item_name || expense.title || 'Expense');
+    group.quantity += Number(expense.quantity || 1);
+    group.total_amount += Number(expense.total_amount || expense.amount || 0);
+    group.amount = group.total_amount;
+    group.expense_type = group.expense_type === expense.expense_type ? group.expense_type : group.expense_type ? 'Multiple types' : expense.expense_type || expense.category;
+    invoiceGroups.set(key, group);
+  });
+  const groupedExpenses = [...invoiceGroups.values()];
   const pageSize = Number(expensePageSize.value);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(groupedExpenses.length / pageSize));
   allExpensesPage = Math.min(allExpensesPage, totalPages);
-  const pageRows = filtered.slice((allExpensesPage - 1) * pageSize, allExpensesPage * pageSize);
+  const pageRows = groupedExpenses.slice((allExpensesPage - 1) * pageSize, allExpensesPage * pageSize);
   const expenseAction = showingDeletedExpenses
-    ? (expense) => `<button type="button" data-restore-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore expense"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
-    : (expense) => `<button type="button" data-edit-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-600" aria-label="Edit expense"><i data-lucide="pencil" class="h-4 w-4"></i></button><button type="button" data-delete-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete expense"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
+    ? (expense) => `<button type="button" data-restore-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600" aria-label="Restore invoice"><i data-lucide="undo-2" class="h-4 w-4"></i></button>`
+    : (expense) => `<button type="button" data-delete-all-expense="${expense.id}" class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete invoice"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`;
   allExpensesTableBody.innerHTML = pageRows.map((expense) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm text-slate-600">${new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td class="px-5 py-4"><div class="flex flex-col gap-1"><p class="text-sm font-semibold text-slate-800">${escapeHtml(expense.item_name || expense.title)}</p><p class="text-xs font-normal text-slate-500">${escapeHtml(expense.quantity || 1)} ${escapeHtml(expense.unit || 'pcs')}${expense.note ? ` · ${escapeHtml(expense.note)}` : ''}</p></div></td><td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">${escapeHtml(expense.expense_type || expense.category || 'All Cost')}</span></td><td class="px-5 py-4 text-sm text-slate-600">${formatTaka(expense.unit_price || expense.amount)}</td><td class="px-5 py-4 font-['Space_Grotesk'] text-sm font-bold text-slate-900">${formatTaka(expense.total_amount || expense.amount)}</td><td class="px-5 py-4 text-sm text-slate-600">${escapeHtml(expense.added_by || 'You')}</td><td class="px-5 py-4 text-right">${expenseAction(expense)}</td></tr>`).join('');
   allExpensesEmpty.classList.toggle('hidden', pageRows.length > 0);
   document.querySelector('#allExpensesMonthlyTotal').textContent = formatTaka(allExpenses.filter((expense) => new Date(expense.expense_date).getMonth() === new Date().getMonth()).reduce((sum, expense) => sum + Number(expense.total_amount || expense.amount || 0), 0));
-  document.querySelector('#allExpensesTransactionCount').textContent = allExpenses.length;
+  document.querySelector('#allExpensesTransactionCount').textContent = groupedExpenses.length;
   expensePageLabel.textContent = `Page ${allExpensesPage} of ${totalPages}`;
   expensePrevPage.disabled = allExpensesPage === 1;
   expenseNextPage.disabled = allExpensesPage === totalPages;
@@ -683,7 +696,7 @@ function renderAllExpenses() {
 async function loadAllExpenses(includeDeleted = false) {
   if (!currentUser) return;
   const loadId = ++allExpensesLoadId;
-  const { data, error } = await supabase.from('expenses').select('id, expense_date, item_name, title, expense_type, category, unit, quantity, unit_price, total_amount, amount, note, user_id').eq('user_id', currentUser.id).eq('is_deleted', includeDeleted).order('expense_date', { ascending: false });
+  const { data, error } = await supabase.from('expenses').select('id, invoice_id, expense_date, item_name, title, expense_type, category, unit, quantity, unit_price, total_amount, amount, note, user_id').eq('user_id', currentUser.id).eq('is_deleted', includeDeleted).order('expense_date', { ascending: false });
   if (error) { showToast(error.message, true); return; }
   if (loadId !== allExpensesLoadId) return;
   allExpenses = data || [];
@@ -693,11 +706,18 @@ async function loadAllExpenses(includeDeleted = false) {
 
 async function softDeleteExpense(expenseId) {
   const previous = allExpenses;
-  allExpenses = allExpenses.filter((expense) => expense.id !== expenseId);
+  const target = allExpenses.find((expense) => expense.id === expenseId || expense.invoice_id === expenseId);
+  const targetIds = target?.invoice_id ? allExpenses.filter((expense) => expense.invoice_id === target.invoice_id).map((expense) => expense.id) : [expenseId];
+  allExpenses = allExpenses.filter((expense) => !targetIds.includes(expense.id));
   renderAllExpenses();
-  const { error } = await supabase.from('expenses').update({ is_deleted: true }).eq('id', expenseId).eq('user_id', currentUser.id);
+  const { error } = target?.invoice_id
+    ? await supabase.from('expenses').update({ is_deleted: true }).eq('invoice_id', target.invoice_id).eq('user_id', currentUser.id)
+    : await supabase.from('expenses').update({ is_deleted: true }).eq('id', expenseId).eq('user_id', currentUser.id);
   if (error) { allExpenses = previous; renderAllExpenses(); showToast(error.message, true); return; }
-  const { data: deletedExpense, error: verifyError } = await supabase.from('expenses').select('id').eq('id', expenseId).eq('user_id', currentUser.id).eq('is_deleted', true).maybeSingle();
+  const verifyQuery = target?.invoice_id
+    ? supabase.from('expenses').select('id').eq('invoice_id', target.invoice_id).eq('user_id', currentUser.id).eq('is_deleted', true).limit(1).maybeSingle()
+    : supabase.from('expenses').select('id').eq('id', expenseId).eq('user_id', currentUser.id).eq('is_deleted', true).maybeSingle();
+  const { data: deletedExpense, error: verifyError } = await verifyQuery;
   if (verifyError || !deletedExpense) { allExpenses = previous; renderAllExpenses(); showToast(verifyError?.message || 'Expense could not be deleted.', true); return; }
   showToast('Expense moved to Deleted Expenses.');
   window.location.hash = '#deleted-expenses';
@@ -706,9 +726,13 @@ async function softDeleteExpense(expenseId) {
 
 async function restoreExpense(expenseId) {
   const previous = allExpenses;
-  allExpenses = allExpenses.filter((expense) => expense.id !== expenseId);
+  const target = allExpenses.find((expense) => expense.id === expenseId || expense.invoice_id === expenseId);
+  const targetIds = target?.invoice_id ? allExpenses.filter((expense) => expense.invoice_id === target.invoice_id).map((expense) => expense.id) : [expenseId];
+  allExpenses = allExpenses.filter((expense) => !targetIds.includes(expense.id));
   renderAllExpenses();
-  const { error } = await supabase.from('expenses').update({ is_deleted: false }).eq('id', expenseId).eq('user_id', currentUser.id);
+  const { error } = target?.invoice_id
+    ? await supabase.from('expenses').update({ is_deleted: false }).eq('invoice_id', target.invoice_id).eq('user_id', currentUser.id)
+    : await supabase.from('expenses').update({ is_deleted: false }).eq('id', expenseId).eq('user_id', currentUser.id);
   if (error) { allExpenses = previous; renderAllExpenses(); showToast(error.message, true); return; }
   showToast('Expense restored successfully.');
 }
@@ -1463,11 +1487,12 @@ expenseMemoForm.addEventListener('submit', async (event) => {
   });
   const saveButton = document.querySelector('#saveInvoiceButton');
   saveButton.disabled = true;
+  const invoiceId = editingExpenseId ? null : crypto.randomUUID();
   const { error } = editingExpenseId
     ? await supabase.from('expenses').update({ ...rows[0], total_amount: rows[0].quantity * rows[0].unit_price }).eq('id', editingExpenseId).eq('user_id', currentUser.id)
     : await supabase.from('expenses').insert(rows.map((row) => {
       const totalAmount = row.quantity * row.unit_price;
-      return { ...row, user_id: currentUser.id, title: row.item_name, amount: totalAmount, category: row.expense_type, expense_date: expenseMemoDate.value, total_amount: totalAmount, is_deleted: false };
+      return { ...row, user_id: currentUser.id, invoice_id: invoiceId, title: row.item_name, amount: totalAmount, category: row.expense_type, expense_date: expenseMemoDate.value, total_amount: totalAmount, is_deleted: false };
     }));
   saveButton.disabled = false;
   if (error) return showToast(error.message, true);
@@ -1476,8 +1501,8 @@ expenseMemoForm.addEventListener('submit', async (event) => {
   memoRows.innerHTML = '';
   addMemoRow();
   editingExpenseId = null;
-  window.location.hash = '#expenses/all';
-  setAppView('all');
+  window.location.hash = '#expense/add';
+  setAppView('memo');
 });
 [allExpensesSearch, expenseDateFilter, expenseTypeFilter, expensePageSize].forEach((control) => control.addEventListener('input', () => { allExpensesPage = 1; renderAllExpenses(); }));
 expensePrevPage.addEventListener('click', () => { if (allExpensesPage > 1) { allExpensesPage -= 1; renderAllExpenses(); } });
