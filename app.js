@@ -115,12 +115,18 @@ const membersView = document.querySelector('#membersView');
 const membersTableBody = document.querySelector('#membersTableBody');
 const membersEmpty = document.querySelector('#membersEmpty');
 const reportsView = document.querySelector('#reportsView');
+const cashInHandView = document.querySelector('#cashInHandView');
+const incomeStatementView = document.querySelector('#incomeStatementView');
+const expenseReportView = document.querySelector('#expenseReportView');
 const reportTableBody = document.querySelector('#reportTableBody');
 const reportSummaryIncome = document.querySelector('#reportSummaryIncome');
 const reportSummaryExpense = document.querySelector('#reportSummaryExpense');
 const reportSummaryBalance = document.querySelector('#reportSummaryBalance');
 const reportSummaryAverage = document.querySelector('#reportSummaryAverage');
 const reportRangeSelect = document.querySelector('#reportRangeSelect');
+const cashInHandTableBody = document.querySelector('#cashInHandTableBody');
+const incomeStatementTableBody = document.querySelector('#incomeStatementTableBody');
+const expenseReportTableBody = document.querySelector('#expenseReportTableBody');
 const userRoleFilter = document.querySelector('#userRoleFilter');
 const addUserButton = document.querySelector('#addUserButton');
 const addUserModal = document.querySelector('#addUserModal');
@@ -313,6 +319,9 @@ function setAppView(view) {
   allExpensesView.classList.toggle('hidden', view !== 'all' && view !== 'deleted');
   expenseTypesView.classList.toggle('hidden', view !== 'types');
   reportsView.classList.toggle('hidden', view !== 'reports');
+  cashInHandView.classList.toggle('hidden', view !== 'cash-in-hand');
+  incomeStatementView.classList.toggle('hidden', view !== 'income-statement');
+  expenseReportView.classList.toggle('hidden', view !== 'expense-report');
   membersView.classList.toggle('hidden', view !== 'members');
   if (view === 'memo' && !memoRows.children.length) addMemoRow();
   if (view === 'types') loadExpenseTypes();
@@ -320,7 +329,7 @@ function setAppView(view) {
   if (view === 'income' || view === 'deleted-income') loadIncomes(view === 'deleted-income');
   if (view === 'all' || view === 'deleted') loadAllExpenses(view === 'deleted');
   if (view === 'members') loadMembers();
-  if (view === 'reports') loadReportsData();
+  if (view === 'reports' || view === 'cash-in-hand' || view === 'income-statement' || view === 'expense-report') loadReportsData();
 }
 
 function formatReportMonth(stepKey) {
@@ -391,6 +400,53 @@ function renderReports() {
   `).join('');
 }
 
+function getExpenseAmount(expense) {
+  return Number(expense.total_amount || expense.amount || 0);
+}
+
+function renderReportChildren() {
+  const activeIncomes = incomes.filter((income) => !income.is_deleted);
+  const activeExpenses = allExpenses.filter((expense) => !expense.is_deleted);
+  const totalIncome = activeIncomes.reduce((sum, income) => sum + Number(income.amount || 0), 0);
+  const totalExpense = activeExpenses.reduce((sum, expense) => sum + getExpenseAmount(expense), 0);
+  const monthlyRows = buildMonthlyReportRows();
+  let closingCash = 0;
+
+  document.querySelector('#cashIncomeTotal').textContent = formatTaka(totalIncome);
+  document.querySelector('#cashExpenseTotal').textContent = formatTaka(totalExpense);
+  document.querySelector('#cashBalanceTotal').textContent = formatTaka(totalIncome - totalExpense);
+  cashInHandTableBody.innerHTML = monthlyRows.map((row) => {
+    closingCash += row.balance;
+    return `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${formatReportMonth(row.key)}</td><td class="px-5 py-4 text-right text-sm font-bold text-emerald-600">${formatTaka(row.income)}</td><td class="px-5 py-4 text-right text-sm font-bold text-rose-600">${formatTaka(row.expense)}</td><td class="px-5 py-4 text-right text-sm font-bold text-slate-900">${formatTaka(closingCash)}</td></tr>`;
+  }).join('');
+
+  const incomeByMonth = new Map();
+  activeIncomes.forEach((income) => {
+    const date = new Date(`${income.income_date}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const entry = incomeByMonth.get(key) || { amount: 0, count: 0 };
+    entry.amount += Number(income.amount || 0);
+    entry.count += 1;
+    incomeByMonth.set(key, entry);
+  });
+  document.querySelector('#incomeStatementTotal').textContent = formatTaka(totalIncome);
+  document.querySelector('#incomeStatementCount').textContent = String(activeIncomes.length);
+  incomeStatementTableBody.innerHTML = [...incomeByMonth.entries()].sort((first, second) => first[0].localeCompare(second[0])).reverse().map(([key, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${formatReportMonth(key)}</td><td class="px-5 py-4 text-right text-sm font-bold text-emerald-600">${formatTaka(row.amount)}</td><td class="px-5 py-4 text-right text-sm text-slate-600">${row.count}</td></tr>`).join('');
+
+  const expenseByCategory = new Map();
+  activeExpenses.forEach((expense) => {
+    const category = expense.expense_type || expense.category || 'Uncategorized';
+    const entry = expenseByCategory.get(category) || { amount: 0, count: 0 };
+    entry.amount += getExpenseAmount(expense);
+    entry.count += 1;
+    expenseByCategory.set(category, entry);
+  });
+  document.querySelector('#expenseReportTotal').textContent = formatTaka(totalExpense);
+  document.querySelector('#expenseReportCount').textContent = String(activeExpenses.length);
+  expenseReportTableBody.innerHTML = [...expenseByCategory.entries()].sort((first, second) => second[1].amount - first[1].amount).map(([category, row]) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${escapeHtml(category)}</td><td class="px-5 py-4 text-right text-sm text-slate-600">${row.count}</td><td class="px-5 py-4 text-right text-sm font-bold text-rose-600">${formatTaka(row.amount)}</td></tr>`).join('');
+}
+
 async function loadReportsData() {
   if (!currentUser) return;
   const [incomeResult, expenseResult] = await Promise.all([
@@ -410,6 +466,7 @@ async function loadReportsData() {
   incomes = incomeResult.data || [];
   allExpenses = expenseResult.data || [];
   renderReports();
+  renderReportChildren();
 }
 
 function renderMemoTotal() {
@@ -782,7 +839,7 @@ async function showDashboard(isVisible, user = currentUser) {
     await loadExpenses();
     subscribeToExpenses();
     const route = window.location.hash;
-    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
+    setAppView(route === '#expense-types' ? 'types' : route === '#expenses/all' ? 'all' : route === '#deleted-expenses' ? 'deleted' : route === '#expense/add' ? 'memo' : route === '#income-types' ? 'income-types' : route === '#deleted-income' ? 'deleted-income' : route === '#income/add' || route === '#income/all' || route === '#income' ? 'income' : route === '#reports/cash-in-hand' ? 'cash-in-hand' : route === '#reports/income-statement' ? 'income-statement' : route === '#reports/expense' ? 'expense-report' : route === '#reports' ? 'reports' : route === '#members' ? 'members' : 'dashboard');
   } else {
     unsubscribeFromExpenses();
   }
@@ -1034,6 +1091,10 @@ const incomeToggle = document.querySelector('#incomeToggle');
 const incomeSubmenu = document.querySelector('#incomeSubmenu');
 const incomeChevron = incomeToggle.querySelector('.income-chevron');
 const incomeLinks = document.querySelectorAll('.income-subitem');
+const reportsToggle = document.querySelector('#reportsToggle');
+const reportsSubmenu = document.querySelector('#reportsSubmenu');
+const reportsChevron = reportsToggle.querySelector('.reports-chevron');
+const reportLinks = document.querySelectorAll('.report-subitem');
 
 function setExpensesExpanded(isExpanded) {
   expensesToggle.setAttribute('aria-expanded', String(isExpanded));
@@ -1071,11 +1132,30 @@ function setActiveIncomeLink(activeLink) {
   });
 }
 
+function setReportsExpanded(isExpanded) {
+  reportsToggle.setAttribute('aria-expanded', String(isExpanded));
+  reportsSubmenu.classList.toggle('grid-rows-[1fr]', isExpanded);
+  reportsSubmenu.classList.toggle('grid-rows-[0fr]', !isExpanded);
+  reportsChevron.classList.toggle('rotate-180', isExpanded);
+}
+
+function setActiveReportLink(activeLink) {
+  reportLinks.forEach((link) => {
+    const isActive = link === activeLink;
+    link.classList.toggle('bg-slate-100', isActive);
+    link.classList.toggle('font-semibold', isActive);
+    link.classList.toggle('text-slate-900', isActive);
+    link.classList.toggle('text-slate-600', !isActive);
+    link.querySelector('.active-indicator').classList.toggle('opacity-0', !isActive);
+  });
+}
+
 document.querySelector('#openSidebar').addEventListener('click', () => setSidebar(true));
 document.querySelector('#closeSidebar').addEventListener('click', () => setSidebar(false));
 document.querySelector('#mobileOverlay').addEventListener('click', () => setSidebar(false));
 expensesToggle.addEventListener('click', () => setExpensesExpanded(expensesToggle.getAttribute('aria-expanded') !== 'true'));
 incomeToggle.addEventListener('click', () => setIncomeExpanded(incomeToggle.getAttribute('aria-expanded') !== 'true'));
+reportsToggle.addEventListener('click', () => setReportsExpanded(reportsToggle.getAttribute('aria-expanded') !== 'true'));
 expenseLinks.forEach((link) => {
   link.addEventListener('click', () => {
     setActiveExpenseLink(link);
@@ -1095,6 +1175,16 @@ incomeLinks.forEach((link) => {
     setAppView(view);
     setSidebar(false);
     if (link.dataset.incomeLink === 'add') document.querySelector('#incomeSource').focus();
+  });
+});
+reportLinks.forEach((link) => {
+  link.addEventListener('click', () => {
+    setActiveReportLink(link);
+    setReportsExpanded(true);
+    const view = link.dataset.reportLink === 'cash' ? 'cash-in-hand' : link.dataset.reportLink === 'income-statement' ? 'income-statement' : link.dataset.reportLink === 'expense' ? 'expense-report' : 'reports';
+    window.location.hash = link.getAttribute('href');
+    setAppView(view);
+    setSidebar(false);
   });
 });
 document.querySelector('#expenseTypesBack').addEventListener('click', () => {
