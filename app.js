@@ -215,6 +215,14 @@ const detailedExpenseCategories = [
   { type: 'TRANSPORTATION', names: ['Rickshaw / Bus Fare', 'Bike Fuel', 'Ride Sharing'] },
 ];
 
+const defaultIncomeSources = [
+  { type: 'JOB / SALARY', sources: ['Monthly Salary', 'Bonus', 'Overtime', 'Incentive / Commission'] },
+  { type: 'BUSINESS', sources: ['Shop Sales', 'Service Income', 'Client Payment', 'Wholesale Profit'] },
+  { type: 'FREELANCING / ONLINE', sources: ['Web Development', 'Client Project', 'Ad Revenue', 'Consultancy'] },
+  { type: 'INVESTMENT & RENT', sources: ['House Rent', 'Shop Rent', 'Bank Interest', 'Dividend / Profit Share'] },
+  { type: 'OTHERS', sources: ['Family Support / Remittance', 'Gift Received', 'Sale of Old Items', 'Miscellaneous'] },
+];
+
 async function ensureDetailedExpenseCategories() {
   if (!currentUser) return false;
   const { data: existing, error: loadError } = await supabase.from('expense_categories').select('id, name, parent_id, is_deleted').eq('family_id', currentUser.id);
@@ -247,6 +255,33 @@ async function ensureDetailedExpenseCategories() {
         const { error } = await supabase.from('expense_categories').insert({ family_id: currentUser.id, name, parent_id: parent.id, description: 'Expense name', is_deleted: false });
         if (error) { showToast(error.message, true); return false; }
       }
+    }
+  }
+  return true;
+}
+
+async function ensureDefaultIncomeSources() {
+  if (!currentUser) return false;
+  const { data: existing, error: loadError } = await supabase.from('income_categories').select('id, name, description, is_deleted').eq('user_id', currentUser.id);
+  if (loadError) { showToast(loadError.message, true); return false; }
+  const activeCategories = (existing || []).filter((category) => !category.is_deleted);
+  if (activeCategories.length) {
+    const { error } = await supabase.from('income_categories').update({ is_deleted: true }).eq('user_id', currentUser.id).eq('is_deleted', false);
+    if (error) { showToast(error.message, true); return false; }
+  }
+
+  const categoryByKey = new Map((existing || []).map((category) => [`${category.name}|${category.description || ''}`, category]));
+  for (const group of defaultIncomeSources) {
+    const typeDescription = 'Income type';
+    const sourceDescription = `Income source under ${group.type}`;
+    const rows = [{ name: group.type, description: typeDescription }, ...group.sources.map((source) => ({ name: source, description: sourceDescription }))];
+    for (const row of rows) {
+      const key = `${row.name}|${row.description}`;
+      const existingRow = categoryByKey.get(key);
+      const result = existingRow
+        ? await supabase.from('income_categories').update({ name: row.name, description: row.description, is_deleted: false }).eq('id', existingRow.id).eq('user_id', currentUser.id)
+        : await supabase.from('income_categories').insert({ user_id: currentUser.id, name: row.name, description: row.description, is_deleted: false });
+      if (result.error) { showToast(result.error.message, true); return false; }
     }
   }
   return true;
@@ -371,7 +406,7 @@ async function loadIncomeTypes() {
     incomeTypeSelect.className = incomeSource.className;
     incomeSource.replaceWith(incomeTypeSelect);
   }
-  if (incomeSource || document.querySelector('#incomeSource')) document.querySelector('#incomeSource').innerHTML = `<option value="">Choose an income type</option>${incomeTypes.map((type) => `<option value="${escapeHtml(type.name)}">${escapeHtml(type.name)}</option>`).join('')}`;
+  if (incomeSource || document.querySelector('#incomeSource')) document.querySelector('#incomeSource').innerHTML = `<option value="">Choose an income source</option>${incomeTypes.filter((type) => (type.description || '').startsWith('Income source under ')).map((type) => `<option value="${escapeHtml(type.name)}">${escapeHtml(type.name)}</option>`).join('')}`;
   incomeTypesTableBody.innerHTML = incomeTypes.map((type) => `<tr class="transition hover:bg-slate-50"><td class="px-5 py-4 text-sm font-semibold text-slate-800">${escapeHtml(type.name)}</td><td class="px-5 py-4 text-sm text-slate-500">${escapeHtml(type.description || 'No description')}</td><td class="px-5 py-4 text-right"><button type="button" data-delete-income-type="${escapeHtml(type.id)}" class="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600" aria-label="Delete ${escapeHtml(type.name)}"><i data-lucide="trash-2" class="h-4 w-4"></i></button></td></tr>`).join('');
   incomeTypesEmpty.classList.toggle('hidden', incomeTypes.length > 0);
   incomeTypesTableBody.querySelectorAll('[data-delete-income-type]').forEach((button) => button.addEventListener('click', async () => {
@@ -1213,6 +1248,7 @@ async function showDashboard(isVisible, user = currentUser, forceDashboard = fal
   if (isVisible) {
     currentUser = user;
     await ensureDetailedExpenseCategories();
+    await ensureDefaultIncomeSources();
     expenseDate.value = new Date().toISOString().slice(0, 10);
     expenseMemoDate.value = new Date().toISOString().slice(0, 10);
     incomeDate.value = new Date().toISOString().slice(0, 10);
