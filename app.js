@@ -1389,7 +1389,7 @@ authForm.addEventListener('submit', async (event) => {
     return;
   }
   currentUser = result.data.user;
-  await showDashboard(true, currentUser, true);
+  await showDashboard(true, currentUser);
 });
 
 expenseForm.addEventListener('submit', async (event) => {
@@ -1488,14 +1488,29 @@ profileForm.addEventListener('submit', async (event) => {
   showProfileMessage('Profile saved successfully.');
 });
 
-supabase.auth.getSession().then(({ data: { session } }) => {
+async function applyAuthSession(session) {
   currentUser = session?.user || null;
-  return showDashboard(Boolean(session), currentUser);
-});
+
+  if (!currentUser) {
+    currentProfile = null;
+    await showDashboard(false, null);
+    return;
+  }
+
+  try {
+    await showDashboard(true, currentUser);
+  } catch (error) {
+    currentUser = null;
+    currentProfile = null;
+    await showDashboard(false, null);
+    showMessage(`Could not load your account: ${error.message}`, true);
+  }
+}
+
+supabase.auth.getSession().then(({ data: { session } }) => applyAuthSession(session));
 
 supabase.auth.onAuthStateChange((_event, session) => {
-  currentUser = session?.user || null;
-  showDashboard(Boolean(session), currentUser);
+  setTimeout(() => applyAuthSession(session), 0);
 });
 
 function setSidebar(open) {
